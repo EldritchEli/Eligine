@@ -1,3 +1,4 @@
+use std::f32::consts::PI;
 use anyhow::anyhow;
 use vulkanalia::{vk, Device, Entry, Instance};
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
@@ -17,10 +18,15 @@ use crate::sync_util::create_sync_objects;
 use crate::descriptor_util::{create_descriptor_pool, create_descriptor_set_layout, create_descriptor_sets, create_uniform_buffers};
 use crate::vertexbuffer_util::{create_index_buffer, create_vertex_buffer, load_model, Vertex, VertexData};
 use std::time::Instant;
-use cgmath::{point3, vec3, Deg};
-use crate::transforms::{Mat4, UniformBufferObject};
+
+
 use std::ptr::copy_nonoverlapping as memcpy;
+use nalgebra_glm::{degrees, perspective, radians, rotate_y, rotate_z, Mat4};
+use crate::color_objects::create_color_objects;
+use crate::game_objects::Scene::Scene;
 use crate::image_util::{create_texture_image, create_texture_image_view, create_texture_sampler};
+use crate::input_state::InputState;
+use crate::transforms::UniformBufferObject;
 
 /// Our Vulkan app.
 #[derive(Clone, Debug)]
@@ -28,6 +34,7 @@ pub struct App {
     pub entry: Entry,
     pub instance: Instance,
     pub data: AppData,
+    pub scene: Scene,
     pub(crate) device: Device,
     frame: usize,
     pub(crate) resized: bool,
@@ -55,6 +62,7 @@ impl App {
 
         create_pipeline(&device, &mut data)?;
         create_command_pool(&instance, &device, &mut data)?;
+        create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
         create_framebuffers(&device, &mut data)?;
         create_texture_image(&instance, &device, &mut data, "src/resources/viking_room.png".parse()?)?;
@@ -71,7 +79,7 @@ impl App {
         create_command_buffers(&device, &mut data)?;
         create_sync_objects(&device, &mut data)?;
 
-        Ok(Self { entry, instance, data, device, frame: 0, resized, start})
+        Ok(Self { entry, instance, data, scene: Default::default(), device, frame: 0, resized, start})
     }
 
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> anyhow::Result<()> {
@@ -81,6 +89,7 @@ impl App {
         create_swapchain_image_views(&self.device, &mut self.data)?;
         create_render_pass(&self.instance, &self.device, &mut self.data)?;
         create_pipeline(&self.device, &mut self.data)?;
+        create_color_objects(&self.instance, &self.device, &mut self.data)?;
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
         create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
@@ -92,15 +101,13 @@ impl App {
 
     pub unsafe fn update_uniform_buffer(&self, image_index: usize) -> anyhow::Result<()> {
         let time = self.start.elapsed().as_secs_f32();
-        let model = Mat4::from_axis_angle(
-            vec3(0.0, 0.0, 1.0),
-            Deg(90.0) * time
-        );
-        let view = Mat4::look_at_rh(
-            point3(2.0, 2.0, 2.0),
-            point3(0.0, 0.0, 0.0),
-            vec3(0.0, 0.0, 1.0),
-        );
+        let model : Mat4 = rotate_z(&Mat4::identity(), PI/2.0*time);
+        //let view = Mat4::look_at_rh(
+        //    point3(2.0, 2.0, 2.0),
+        //    point3(0.0, 0.0, 0.0),
+        //    vec3(0.0, 0.0, 1.0),
+        //);
+        let view = self.scene.camera.matrix();
         let correction = Mat4::new(
             1.0,  0.0,       0.0, 0.0,
             // We're also flipping the Y-axis with this line's `-1.0`.
@@ -108,14 +115,9 @@ impl App {
             0.0,  0.0, 1.0 / 2.0, 0.0,
             0.0,  0.0, 1.0 / 2.0, 1.0,
         );
+        let aspect = self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32;
+        let proj = correction*perspective(aspect,PI/4.0, 0.1,100.0);
 
-        let proj = correction
-            * cgmath::perspective(
-            Deg(45.0),
-            self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32,
-            0.1,
-            10.0,
-        );
 
         let ubo = UniformBufferObject { model, view, proj };
         let memory = self.device.map_memory(
@@ -247,6 +249,10 @@ impl App {
     }
 
     unsafe fn destroy_swapchain(&mut self) {
+        self.device.destroy_image_view(self.data.color_image_view, None);
+        self.device.free_memory(self.data.color_image_memory, None);
+        self.device.destroy_image(self.data.color_image, None);
+
         self.device.destroy_image_view(self.data.depth_image_view, None);
         self.device.free_memory(self.data.depth_image_memory, None);
         self.device.destroy_image(self.data.depth_image, None);
@@ -277,6 +283,7 @@ pub struct AppData {
    pub surface: vk::SurfaceKHR,
     pub messenger: vk::DebugUtilsMessengerEXT,
     pub physical_device: vk::PhysicalDevice,
+    pub msaa_samples: vk::SampleCountFlags,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
 
@@ -322,7 +329,11 @@ pub struct AppData {
     pub depth_image: vk::Image,
     pub depth_image_memory: vk::DeviceMemory,
     pub depth_image_view: vk::ImageView,
-    //pub vertex_data     : VertexData
+
+    pub(crate) color_image: vk::Image,
+    pub(crate) color_image_memory: vk::DeviceMemory,
+    pub(crate) color_image_view: vk::ImageView,
+
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub vertex_buffer: vk::Buffer,

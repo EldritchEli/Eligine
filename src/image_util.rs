@@ -58,6 +58,7 @@ pub unsafe fn create_texture_image(
         width,
         height,
         data.mip_levels,
+        vk::SampleCountFlags::_1,
         vk::Format::R8G8B8A8_SRGB,
         vk::ImageTiling::OPTIMAL,
         vk::ImageUsageFlags::SAMPLED
@@ -88,15 +89,6 @@ pub unsafe fn create_texture_image(
         height,
     )?;
 
-    transition_image_layout(
-        device,
-        data,
-        data.texture_image,
-        vk::Format::R8G8B8A8_SRGB,
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        data.mip_levels
-    )?;
     device.destroy_buffer(staging_buffer, None);
     device.free_memory(staging_buffer_memory, None);
 
@@ -121,6 +113,7 @@ pub unsafe fn create_image(
     width: u32,
     height: u32,
     mip_levels: u32,
+    samples: vk::SampleCountFlags,
     format: vk::Format,
     tiling: vk::ImageTiling,
     usage: vk::ImageUsageFlags,
@@ -139,7 +132,7 @@ pub unsafe fn create_image(
         .tiling(tiling)
         .initial_layout(vk::ImageLayout::UNDEFINED)
         .usage(usage)
-        .samples(vk::SampleCountFlags::_1)
+        .samples(samples)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
     let image = device.create_image(&info, None)?;
@@ -477,3 +470,4 @@ unsafe fn generate_mipmaps(
 
     Ok(())
 }
+

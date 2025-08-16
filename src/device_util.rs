@@ -20,6 +20,7 @@ pub unsafe fn pick_physical_device(instance: &Instance, data: &mut AppData) -> a
         } else {
             info!("Selected physical device (`{}`).", properties.device_name);
             data.physical_device = physical_device;
+            data.msaa_samples = get_max_msaa_samples(instance, data);
             return Ok(());
         }
     }
@@ -106,7 +107,9 @@ pub unsafe fn create_logical_device(
     }
 
     let features = vk::PhysicalDeviceFeatures::builder()
-        .sampler_anisotropy(true);
+        .sampler_anisotropy(true)
+    // Enable sample shading feature for the device.
+        .sample_rate_shading(true);
 
 
     let info = vk::DeviceCreateInfo::builder()
@@ -123,4 +126,25 @@ pub unsafe fn create_logical_device(
     Ok(device)
 
 
+}
+
+unsafe fn get_max_msaa_samples(
+    instance: &Instance,
+    data: &AppData,
+) -> vk::SampleCountFlags {
+    let properties = instance.get_physical_device_properties(data.physical_device);
+    let counts = properties.limits.framebuffer_color_sample_counts
+        & properties.limits.framebuffer_depth_sample_counts;
+    [
+        vk::SampleCountFlags::_64,
+        vk::SampleCountFlags::_32,
+        vk::SampleCountFlags::_16,
+        vk::SampleCountFlags::_8,
+        vk::SampleCountFlags::_4,
+        vk::SampleCountFlags::_2,
+    ]
+        .iter()
+        .cloned()
+        .find(|c| counts.contains(*c))
+        .unwrap_or(vk::SampleCountFlags::_1)
 }

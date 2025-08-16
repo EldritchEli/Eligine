@@ -9,7 +9,8 @@ pub unsafe fn create_framebuffers(device: &Device, data: &mut AppData) -> anyhow
         .swapchain_image_views
         .iter()
         .map(|i| {
-            let attachments = &[*i, data.depth_image_view];
+            let attachments = &[data.color_image_view, data.depth_image_view, *i];
+
             let create_info = vk::FramebufferCreateInfo::builder()
                 .render_pass(data.render_pass)
                 .attachments(attachments)
@@ -36,13 +37,13 @@ pub unsafe fn create_depth_objects(instance: &Instance, device: &Device, data: &
         data,
         data.swapchain_extent.width,
         data.swapchain_extent.height,
-        1,
+        1,data.msaa_samples,
         format,
         vk::ImageTiling::OPTIMAL,
         vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
-
     )?;
+
 
     data.depth_image = depth_image;
     data.depth_image_memory = depth_image_memory;

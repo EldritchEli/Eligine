@@ -1,6 +1,6 @@
 use std::mem::size_of;
 use anyhow::{Result};
-use cgmath::{vec2, vec3};
+
 use vulkanalia::{vk, Device, Instance};
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use crate::render_app::AppData;
@@ -12,9 +12,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::BufReader;
-
-type Vec2 = cgmath::Vector2<f32>;
-type Vec3 = cgmath::Vector3<f32>;
+use nalgebra_glm::{vec2, vec3, Vec2, Vec3};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -38,7 +36,7 @@ pub enum Colors { RGB(Vec<Vec3>), Texture(Texture) }
 pub fn load_model(data: &mut AppData) -> Result<()> {
     let mut reader = BufReader::new(File::open("src/resources/viking_room.obj")?);
 
-    let (models,_) = tobj::load_obj_buf(
+    let (models,materials) = tobj::load_obj_buf(
         &mut reader,
         &tobj::LoadOptions { triangulate: true, ..Default::default() },
         |_| Ok(Default::default()),
@@ -103,17 +101,6 @@ impl MeshData {
     }
 
 */
-
-pub static VERTICES: [Vertex; 8] = [
-    Vertex::new(vec3(-0.5, -0.5, 0.0), vec3(1.0, 0.0, 0.0), vec2(1.0, 0.0)),
-    Vertex::new(vec3(0.5, -0.5, 0.0), vec3(0.0, 1.0, 0.0), vec2(0.0, 0.0)),
-    Vertex::new(vec3(0.5, 0.5, 0.0), vec3(0.0, 0.0, 1.0), vec2(0.0, 1.0)),
-    Vertex::new(vec3(-0.5, 0.5, 0.0), vec3(1.0, 1.0, 1.0), vec2(1.0, 1.0)),
-    Vertex::new(vec3(-0.5, -0.5, -0.5), vec3(1.0, 0.0, 0.0), vec2(1.0, 0.0)),
-    Vertex::new(vec3(0.5, -0.5, -0.5), vec3(0.0, 1.0, 0.0), vec2(0.0, 0.0)),
-    Vertex::new(vec3(0.5, 0.5, -0.5), vec3(0.0, 0.0, 1.0), vec2(0.0, 1.0)),
-    Vertex::new(vec3(-0.5, 0.5, -0.5), vec3(1.0, 1.0, 1.0), vec2(1.0, 1.0)),
-];
 
 pub const INDICES: &[u16] = &[
     0, 1, 2, 2, 3, 0,

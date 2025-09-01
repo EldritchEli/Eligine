@@ -1,7 +1,6 @@
-use vulkanalia::{vk, Device};
-use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use crate::render_app::AppData;
-use crate::vertexbuffer_util::{};
+use vulkanalia::vk::{DeviceV1_0, HasBuilder};
+use vulkanalia::{vk, Device};
 
 pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
     let allocate_info = vk::CommandBufferAllocateInfo::builder()
@@ -16,7 +15,7 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> any
 
         let info = vk::CommandBufferBeginInfo::builder()
             .flags(vk::CommandBufferUsageFlags::empty()) // Optional.
-            .inheritance_info(&inheritance);             // Optional.
+            .inheritance_info(&inheritance); // Optional.
 
         device.begin_command_buffer(*command_buffer, &info)?;
 
@@ -25,10 +24,17 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> any
             .extent(data.swapchain_extent);
 
         let color_clear_value = vk::ClearValue {
-            color: vk::ClearColorValue { float32: [0.0, 0.0, 0.0, 1.0], }, };
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 1.0],
+            },
+        };
 
         let depth_clear_value = vk::ClearValue {
-            depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0, }, };
+            depth_stencil: vk::ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: 0,
+            },
+        };
 
         let clear_values = &[color_clear_value, depth_clear_value];
 
@@ -38,10 +44,12 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> any
             .render_area(render_area)
             .clear_values(clear_values);
 
-        device.cmd_begin_render_pass(
-            *command_buffer, &info, vk::SubpassContents::INLINE);
+        device.cmd_begin_render_pass(*command_buffer, &info, vk::SubpassContents::INLINE);
         device.cmd_bind_pipeline(
-            *command_buffer, vk::PipelineBindPoint::GRAPHICS, data.pipeline);
+            *command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            data.pipeline,
+        );
         device.cmd_bind_vertex_buffers(*command_buffer, 0, &[data.vertex_buffer], &[0]);
         device.cmd_bind_index_buffer(*command_buffer, data.index_buffer, 0, vk::IndexType::UINT32);
 
@@ -54,7 +62,14 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> any
             &[],
         );
 
-        device.cmd_draw_indexed(*command_buffer, data.indices.len()/*INDICES.len()*/ as u32, 1, 0, 0, 0);
+        device.cmd_draw_indexed(
+            *command_buffer,
+            data.indices.len()/*INDICES.len()*/ as u32,
+            1,
+            0,
+            0,
+            0,
+        );
 
         //device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
 

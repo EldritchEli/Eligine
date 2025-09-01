@@ -3,6 +3,7 @@ use crate::render_app::AppData;
 use anyhow::{anyhow, Result};
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder, InstanceV1_0};
 
+/// used to create buffers for various functionss: vertex buffers, uniform buffers, etc.
 pub unsafe fn create_buffer(
     instance: &Instance,
     device: &Device,

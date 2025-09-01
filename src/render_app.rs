@@ -1,13 +1,9 @@
-use std::f32::consts::PI;
-use anyhow::anyhow;
-use vulkanalia::{vk, Device, Entry, Instance};
-use vulkanalia::loader::{LibloadingLoader, LIBRARY};
-use vulkanalia::vk::{DeviceV1_0, ExtDebugUtilsExtension, Handle, HasBuilder, InstanceV1_0, KhrSurfaceExtension, KhrSwapchainExtension};
-use winit::window::Window;
-use vulkanalia::window as vk_window;
-use crate::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use crate::command_buffer_util::create_command_buffers;
 use crate::command_pool::{create_command_pool, create_transient_command_pool};
+use crate::descriptor_util::{
+    create_descriptor_pool, create_descriptor_set_layout, create_descriptor_sets,
+    create_uniform_buffers,
+};
 use crate::device_util::{create_logical_device, pick_physical_device};
 use crate::framebuffer_util::{create_depth_objects, create_framebuffers};
 use crate::instance_util::create_instance;
@@ -15,18 +11,29 @@ use crate::pipeline_util::create_pipeline;
 use crate::render_pass_util::create_render_pass;
 use crate::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::sync_util::create_sync_objects;
-use crate::descriptor_util::{create_descriptor_pool, create_descriptor_set_layout, create_descriptor_sets, create_uniform_buffers};
-use crate::vertexbuffer_util::{create_index_buffer, create_vertex_buffer, load_model, Vertex, VertexData};
+use crate::vertexbuffer_util::{
+    create_index_buffer, create_vertex_buffer, load_model, Vertex, VertexData,
+};
+use crate::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
+use anyhow::anyhow;
+use std::f32::consts::PI;
 use std::time::Instant;
+use vulkanalia::loader::{LibloadingLoader, LIBRARY};
+use vulkanalia::vk::{
+    DeviceV1_0, ExtDebugUtilsExtension, Handle, HasBuilder, InstanceV1_0, KhrSurfaceExtension,
+    KhrSwapchainExtension,
+};
+use vulkanalia::window as vk_window;
+use vulkanalia::{vk, Device, Entry, Instance};
+use winit::window::Window;
 
-
-use std::ptr::copy_nonoverlapping as memcpy;
-use nalgebra_glm::{degrees, perspective, radians, rotate_y, rotate_z, Mat4};
 use crate::color_objects::create_color_objects;
 use crate::game_objects::Scene::Scene;
 use crate::image_util::{create_texture_image, create_texture_image_view, create_texture_sampler};
-use crate::input_state::InputState;
-use crate::transforms::UniformBufferObject;
+use crate::uniform_buffer_object::UniformBufferObject;
+use glam::Mat4;
+use log::info;
+use std::ptr::copy_nonoverlapping as memcpy;
 
 /// Our Vulkan app.
 #[derive(Clone, Debug)]
@@ -40,7 +47,6 @@ pub struct App {
     pub(crate) resized: bool,
     start: Instant,
 }
-
 
 impl App {
     /// Creates our Vulkan app.
@@ -65,7 +71,12 @@ impl App {
         create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
         create_framebuffers(&device, &mut data)?;
-        create_texture_image(&instance, &device, &mut data, "src/resources/viking_room.png".parse()?)?;
+        create_texture_image(
+            &instance,
+            &device,
+            &mut data,
+            "src/resources/viking_room.png".parse()?,
+        )?;
         create_texture_image_view(&device, &mut data)?;
         create_texture_sampler(&device, &mut data)?;
         create_transient_command_pool(&instance, &device, &mut data)?;
@@ -79,7 +90,16 @@ impl App {
         create_command_buffers(&device, &mut data)?;
         create_sync_objects(&device, &mut data)?;
 
-        Ok(Self { entry, instance, data, scene: Default::default(), device, frame: 0, resized, start})
+        Ok(Self {
+            entry,
+            instance,
+            data,
+            scene: Default::default(),
+            device,
+            frame: 0,
+            resized,
+            start,
+        })
     }
 
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> anyhow::Result<()> {
@@ -101,25 +121,43 @@ impl App {
 
     pub unsafe fn update_uniform_buffer(&self, image_index: usize) -> anyhow::Result<()> {
         let time = self.start.elapsed().as_secs_f32();
-        let model : Mat4 = rotate_z(&Mat4::identity(), PI/2.0*time);
-        //let view = Mat4::look_at_rh(
-        //    point3(2.0, 2.0, 2.0),
-        //    point3(0.0, 0.0, 0.0),
-        //    vec3(0.0, 0.0, 1.0),
-        //);
+        let model: Mat4 = Mat4::from_rotation_y(PI / 2.0 * time) * Mat4::from_rotation_x(PI / 2.0);
+
         let view = self.scene.camera.matrix();
-        let correction = Mat4::new(
-            1.0,  0.0,       0.0, 0.0,
+        let inv_view = view.inverse();
+
+        let correction = Mat4::from_cols_array(&[
+            1.0,
+            0.0,
+            0.0,
+            0.0,
             // We're also flipping the Y-axis with this line's `-1.0`.
-            0.0, -1.0,       0.0, 0.0,
-            0.0,  0.0, 1.0 / 2.0, 0.0,
-            0.0,  0.0, 1.0 / 2.0, 1.0,
-        );
-        let aspect = self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32;
-        let proj = correction*perspective(aspect,PI/4.0, 0.1,100.0);
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0 / 2.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0 / 2.0,
+            1.0,
+        ]);
+        let aspect =
+            self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32;
+        let perspective = Mat4::perspective_rh(PI / 6.0, aspect, 0.1, 100.0);
+        let proj = correction * perspective;
 
-
-        let ubo = UniformBufferObject { model, view, proj };
+        let ubo = UniformBufferObject {
+            model,
+            view,
+            inv_view,
+            proj,
+            time: self.start.elapsed().as_secs_f32(),
+        };
+        println!("{}", self.start.elapsed().as_secs_f32());
         let memory = self.device.map_memory(
             self.data.uniform_buffers_memory[image_index],
             0,
@@ -129,22 +167,16 @@ impl App {
 
         memcpy(&ubo, memory.cast(), 1);
 
-        self.device.unmap_memory(self.data.uniform_buffers_memory[image_index]);
-
-
-
+        self.device
+            .unmap_memory(self.data.uniform_buffers_memory[image_index]);
 
         Ok(())
     }
 
     /// Renders a frame for our Vulkan app.
     pub(crate) unsafe fn render(&mut self, window: &Window) -> anyhow::Result<()> {
-
-        self.device.wait_for_fences(
-            &[self.data.in_flight_fences[self.frame]],
-            true,
-            u64::MAX,
-        )?;
+        self.device
+            .wait_for_fences(&[self.data.in_flight_fences[self.frame]], true, u64::MAX)?;
 
         let result = self.device.acquire_next_image_khr(
             self.data.swapchain,
@@ -160,10 +192,10 @@ impl App {
             Err(e) => return Err(anyhow!(e)),
         };
 
-
         let image_in_flight = self.data.images_in_flight[image_index];
         if !image_in_flight.is_null() {
-            self.device.wait_for_fences(&[image_in_flight], true, u64::MAX)?;
+            self.device
+                .wait_for_fences(&[image_in_flight], true, u64::MAX)?;
         }
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
@@ -180,7 +212,8 @@ impl App {
             .command_buffers(command_buffers)
             .signal_semaphores(signal_semaphores);
 
-        self.device.reset_fences(&[self.data.in_flight_fences[self.frame]])?;
+        self.device
+            .reset_fences(&[self.data.in_flight_fences[self.frame]])?;
 
         self.device.queue_submit(
             self.data.graphics_queue,
@@ -195,7 +228,9 @@ impl App {
             .swapchains(swapchains)
             .image_indices(image_indices);
 
-        let result = self.device.queue_present_khr(self.data.present_queue, &present_info);
+        let result = self
+            .device
+            .queue_present_khr(self.data.present_queue, &present_info);
         let changed = result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR)
             || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR);
 
@@ -207,70 +242,89 @@ impl App {
         }
         self.device.queue_wait_idle(self.data.present_queue)?;
 
-
-
-
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())
     }
 
-
     /// Destroys our Vulkan app.
     pub(crate) unsafe fn destroy(&mut self) {
-
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
         self.device.destroy_sampler(self.data.texture_sampler, None);
-        self.device.destroy_image_view(self.data.texture_image_view, None);
+        self.device
+            .destroy_image_view(self.data.texture_image_view, None);
 
         self.device.destroy_image(self.data.texture_image, None);
-        self.device.free_memory(self.data.texture_image_memory, None);
+        self.device
+            .free_memory(self.data.texture_image_memory, None);
 
-        self.device.destroy_descriptor_set_layout(self.data.descriptor_set_layout, None);
+        self.device
+            .destroy_descriptor_set_layout(self.data.descriptor_set_layout, None);
 
-        self.data.in_flight_fences.iter().for_each(|f| self.device.destroy_fence(*f, None));
-        self.data.render_finished_semaphores.iter().for_each(|s| self.device.destroy_semaphore(*s, None));
-        self.data.image_available_semaphores.iter().for_each(|s| self.device.destroy_semaphore(*s, None));
-        self.device.free_memory(self.data.vertex_buffer_memory, None);
+        self.data
+            .in_flight_fences
+            .iter()
+            .for_each(|f| self.device.destroy_fence(*f, None));
+        self.data
+            .render_finished_semaphores
+            .iter()
+            .for_each(|s| self.device.destroy_semaphore(*s, None));
+        self.data
+            .image_available_semaphores
+            .iter()
+            .for_each(|s| self.device.destroy_semaphore(*s, None));
+        self.device
+            .free_memory(self.data.vertex_buffer_memory, None);
         self.device.destroy_buffer(self.data.vertex_buffer, None);
         self.device.free_memory(self.data.index_buffer_memory, None);
         self.device.destroy_buffer(self.data.index_buffer, None);
 
-
-        self.device.destroy_command_pool(self.data.command_pool, None);
-        self.device.destroy_command_pool(self.data.transient_command_pool, None);
+        self.device
+            .destroy_command_pool(self.data.command_pool, None);
+        self.device
+            .destroy_command_pool(self.data.transient_command_pool, None);
 
         self.device.destroy_device(None);
         self.instance.destroy_surface_khr(self.data.surface, None);
         if VALIDATION_ENABLED {
-            self.instance.destroy_debug_utils_messenger_ext(self.data.messenger, None);
+            self.instance
+                .destroy_debug_utils_messenger_ext(self.data.messenger, None);
         }
         self.instance.destroy_instance(None);
     }
 
     unsafe fn destroy_swapchain(&mut self) {
-        self.device.destroy_image_view(self.data.color_image_view, None);
+        self.device
+            .destroy_image_view(self.data.color_image_view, None);
         self.device.free_memory(self.data.color_image_memory, None);
         self.device.destroy_image(self.data.color_image, None);
 
-        self.device.destroy_image_view(self.data.depth_image_view, None);
+        self.device
+            .destroy_image_view(self.data.depth_image_view, None);
         self.device.free_memory(self.data.depth_image_memory, None);
         self.device.destroy_image(self.data.depth_image, None);
-        self.device.destroy_descriptor_pool(self.data.descriptor_pool, None);
-        self.data.uniform_buffers
+        self.device
+            .destroy_descriptor_pool(self.data.descriptor_pool, None);
+        self.data
+            .uniform_buffers
             .iter()
             .for_each(|b| self.device.destroy_buffer(*b, None));
-        self.data.uniform_buffers_memory
+        self.data
+            .uniform_buffers_memory
             .iter()
             .for_each(|m| self.device.free_memory(*m, None));
-        self.data.framebuffers
+        self.data
+            .framebuffers
             .iter()
             .for_each(|f| self.device.destroy_framebuffer(*f, None));
-        self.device.free_command_buffers(self.data.command_pool, &self.data.command_buffers);
+        self.device
+            .free_command_buffers(self.data.command_pool, &self.data.command_buffers);
         self.device.destroy_pipeline(self.data.pipeline, None);
-        self.device.destroy_pipeline_layout(self.data.pipeline_layout, None);
+        self.device
+            .destroy_pipeline_layout(self.data.pipeline_layout, None);
         self.device.destroy_render_pass(self.data.render_pass, None);
-        self.data.swapchain_image_views
+        self.data
+            .swapchain_image_views
             .iter()
             .for_each(|v| self.device.destroy_image_view(*v, None));
         self.device.destroy_swapchain_khr(self.data.swapchain, None);
@@ -280,7 +334,7 @@ impl App {
 /// The Vulkan handles and associated properties used by our Vulkan app.
 #[derive(Clone, Debug, Default)]
 pub struct AppData {
-   pub surface: vk::SurfaceKHR,
+    pub surface: vk::SurfaceKHR,
     pub messenger: vk::DebugUtilsMessengerEXT,
     pub physical_device: vk::PhysicalDevice,
     pub msaa_samples: vk::SampleCountFlags,
@@ -323,7 +377,7 @@ pub struct AppData {
     pub mip_levels: u32,
     pub texture_image: vk::Image,
     pub texture_image_memory: vk::DeviceMemory,
-    pub  texture_image_view: vk::ImageView,
+    pub texture_image_view: vk::ImageView,
     pub texture_sampler: vk::Sampler,
 
     pub depth_image: vk::Image,

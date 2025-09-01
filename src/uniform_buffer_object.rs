@@ -1,7 +1,5 @@
 
-use nalgebra_glm::Mat4;
-use vulkanalia::vk;
-use vulkanalia::vk::HasBuilder;
+use glam::Mat4;
 
 
 #[repr(C)]
@@ -9,7 +7,9 @@ use vulkanalia::vk::HasBuilder;
 pub struct UniformBufferObject {
     pub model: Mat4,
     pub view: Mat4,
-    pub proj: Mat4
+    pub proj: Mat4,
+    pub inv_view: Mat4,
+    pub time: f32
 }
 
 

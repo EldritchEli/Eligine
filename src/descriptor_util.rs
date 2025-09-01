@@ -1,17 +1,16 @@
-
-use vulkanalia::{vk, Device, Instance};
-use vulkanalia::vk::{DeviceV1_0, HasBuilder};
-use crate::render_app::AppData;
-use anyhow::Result;
 use crate::buffer_util::create_buffer;
-use crate::transforms::UniformBufferObject;
+use crate::render_app::AppData;
+use crate::uniform_buffer_object::UniformBufferObject;
+use anyhow::Result;
+use vulkanalia::vk::{DeviceV1_0, HasBuilder};
+use vulkanalia::{vk, Device, Instance};
 
-pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData )-> Result<()> {
+pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
     let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
-        .stage_flags(vk::ShaderStageFlags::VERTEX);
+        .stage_flags(vk::ShaderStageFlags::all());
 
     let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
         .binding(1)
@@ -20,15 +19,16 @@ pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData )
         .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
     let bindings = &[ubo_binding, sampler_binding];
-    let info = vk::DescriptorSetLayoutCreateInfo::builder()
-        .bindings(bindings);
+    let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
     data.descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
     Ok(())
 }
 
-
-
-pub unsafe fn create_uniform_buffers(instance: &Instance, device: &Device, data: &mut AppData) -> Result<()> {
+pub unsafe fn create_uniform_buffers(
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+) -> Result<()> {
     data.uniform_buffers.clear();
     data.uniform_buffers_memory.clear();
 
@@ -63,7 +63,6 @@ pub unsafe fn create_descriptor_pool(device: &Device, data: &mut AppData) -> Res
         .pool_sizes(pool_sizes)
         .max_sets(data.swapchain_images.len() as u32);
     data.descriptor_pool = device.create_descriptor_pool(&info, None)?;
-
     Ok(())
 }
 
@@ -105,15 +104,8 @@ pub unsafe fn create_descriptor_sets(device: &Device, data: &mut AppData) -> Res
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(image_info);
 
-        device.update_descriptor_sets(
-            &[ubo_write, sampler_write],
-            &[] as &[vk::CopyDescriptorSet],
-        );
+        device.update_descriptor_sets(&[ubo_write, sampler_write], &[] as &[vk::CopyDescriptorSet]);
     }
 
     Ok(())
 }
-
-
-
-

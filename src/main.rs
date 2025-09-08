@@ -59,15 +59,20 @@ fn main() -> Result<(), anyhow::Error> {
         .with_title("Eligine")
         .with_inner_size(LogicalSize::new(1024, 768))
         .build(&event_loop)?;
-
+    let mut time_stamp = 0.0;
     // App
 
     let mut app = unsafe { App::create(&window)? };
+
     let mut minimized = false; //window minimize
 
     event_loop.run(move |event, elwt| {
+        let elapsed = app.start.elapsed().as_secs_f32();
+        let dt = elapsed - time_stamp;
+
+        time_stamp = elapsed;
         input_state.read_event(&event);
-        app.scene.update(0.0001, &input_state);
+        app.scene.update(dt, &input_state);
         match event {
             // Request a redraw when all events were processed.
             Event::AboutToWait => window.request_redraw(),

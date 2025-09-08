@@ -1,12 +1,10 @@
-use vulkanalia::{vk, Device, Instance};
-use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
-use winit::window::Window;
-use crate::{AppData, QueueFamilyIndices};
 use crate::image_util::create_image_view;
+use crate::{AppData, QueueFamilyIndices};
+use vulkanalia::vk::{Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
+use vulkanalia::{vk, Device, Instance};
+use winit::window::Window;
 
-fn get_swapchain_surface_format(
-    formats: &[vk::SurfaceFormatKHR],
-) -> vk::SurfaceFormatKHR {
+fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
     formats
         .iter()
         .cloned()
@@ -17,20 +15,15 @@ fn get_swapchain_surface_format(
         .unwrap_or_else(|| formats[0])
 }
 
-fn get_swapchain_present_mode(
-    present_modes: &[vk::PresentModeKHR],
-) -> vk::PresentModeKHR {
+fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
     present_modes
         .iter()
         .cloned()
-        .find(|m| *m == vk::PresentModeKHR::IMMEDIATE) // Immediate seems to work the best
+        .find(|m| *m == vk::PresentModeKHR::MAILBOX)
         .unwrap_or(vk::PresentModeKHR::FIFO)
 }
 
-fn get_swapchain_extent(
-    window: &Window,
-    capabilities: vk::SurfaceCapabilitiesKHR,
-) -> vk::Extent2D {
+fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
     if capabilities.current_extent.width != u32::MAX {
         capabilities.current_extent
     } else {
@@ -98,10 +91,6 @@ pub unsafe fn create_swapchain(
     data.swapchain_format = surface_format.format;
     data.swapchain_extent = extent;
 
-
-
-
-
     /* It is also possible that you'll render images to a separate image first to perform
     operations like post-processing. In that case you may use a value like
     vk::ImageUsageFlags::TRANSFER_DST instead and use a memory operation to transfer the
@@ -110,11 +99,22 @@ pub unsafe fn create_swapchain(
     Ok(())
 }
 
-pub unsafe fn create_swapchain_image_views(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
+pub unsafe fn create_swapchain_image_views(
+    device: &Device,
+    data: &mut AppData,
+) -> anyhow::Result<()> {
     data.swapchain_image_views = data
         .swapchain_images
         .iter()
-        .map(|i| create_image_view(device, *i, data.swapchain_format, vk::ImageAspectFlags::COLOR, 1/* u32 */))
+        .map(|i| {
+            create_image_view(
+                device,
+                *i,
+                data.swapchain_format,
+                vk::ImageAspectFlags::COLOR,
+                1, /* u32 */
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(())
@@ -135,14 +135,11 @@ impl SwapchainSupport {
     ) -> anyhow::Result<Self> {
         Ok(Self {
             capabilities: instance
-                .get_physical_device_surface_capabilities_khr(
-                    physical_device, data.surface)?,
+                .get_physical_device_surface_capabilities_khr(physical_device, data.surface)?,
             formats: instance
-                .get_physical_device_surface_formats_khr(
-                    physical_device, data.surface)?,
+                .get_physical_device_surface_formats_khr(physical_device, data.surface)?,
             present_modes: instance
-                .get_physical_device_surface_present_modes_khr(
-                    physical_device, data.surface)?,
+                .get_physical_device_surface_present_modes_khr(physical_device, data.surface)?,
         })
     }
 }

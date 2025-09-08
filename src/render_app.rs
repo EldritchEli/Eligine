@@ -42,10 +42,11 @@ pub struct App {
     pub instance: Instance,
     pub data: AppData,
     pub scene: Scene,
-    pub(crate) device: Device,
-    frame: usize,
-    pub(crate) resized: bool,
-    start: Instant,
+    pub device: Device,
+    pub frame: usize,
+    pub resized: bool,
+    pub start: Instant,
+    pub delta_time: f32,
 }
 
 impl App {
@@ -99,8 +100,10 @@ impl App {
             frame: 0,
             resized,
             start,
+            delta_time: 0.0,
         })
     }
+    
 
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> anyhow::Result<()> {
         self.device.device_wait_idle()?;
@@ -121,7 +124,7 @@ impl App {
 
     pub unsafe fn update_uniform_buffer(&self, image_index: usize) -> anyhow::Result<()> {
         let time = self.start.elapsed().as_secs_f32();
-        let model: Mat4 = Mat4::from_rotation_y(PI / 2.0 * time) * Mat4::from_rotation_x(PI / 2.0);
+        let model: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time) * Mat4::from_rotation_x(PI / 2.0);
 
         let view = self.scene.camera.matrix();
         let inv_view = view.inverse();
@@ -157,7 +160,6 @@ impl App {
             proj,
             time: self.start.elapsed().as_secs_f32(),
         };
-        println!("{}", self.start.elapsed().as_secs_f32());
         let memory = self.device.map_memory(
             self.data.uniform_buffers_memory[image_index],
             0,

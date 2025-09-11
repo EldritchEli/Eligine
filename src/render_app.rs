@@ -46,7 +46,6 @@ pub struct App {
     pub frame: usize,
     pub resized: bool,
     pub start: Instant,
-    pub delta_time: f32,
 }
 
 impl App {
@@ -100,10 +99,8 @@ impl App {
             frame: 0,
             resized,
             start,
-            delta_time: 0.0,
         })
     }
-    
 
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> anyhow::Result<()> {
         self.device.device_wait_idle()?;
@@ -126,7 +123,7 @@ impl App {
         let time = self.start.elapsed().as_secs_f32();
         let model: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time) * Mat4::from_rotation_x(PI / 2.0);
 
-        let view = self.scene.camera.matrix();
+        let view = self.scene.camera.transform.matrix();
         let inv_view = view.inverse();
 
         let correction = Mat4::from_cols_array(&[

@@ -51,11 +51,6 @@ impl Camera {
         let v: Vec3 = (amount * self.movement_speed) * (self.transform.rotation * Vec3::Y);
         self.transform.position += v;
     }
-    pub fn matrix(&self) -> Mat4 {
-        let position = self.transform.position;
-
-        Mat4::from_translation(self.transform.position) * Mat4::from_quat(self.transform.rotation)
-    }
 
     pub fn update(&mut self, delta_time: f32, input: &InputState) {
         let mouse_delta = input.mouse_delta;

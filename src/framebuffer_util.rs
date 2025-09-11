@@ -21,7 +21,7 @@ pub unsafe fn create_framebuffers(device: &Device, data: &mut AppData) -> anyhow
 
             device.create_framebuffer(&create_info, None)
         })
-        .collect::<anyhow::Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(())
 }
 

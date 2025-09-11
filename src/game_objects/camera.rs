@@ -55,23 +55,23 @@ impl Camera {
     pub fn update(&mut self, delta_time: f32, input: &InputState) {
         let mouse_delta = input.mouse_delta;
 
-        if input.keyW.is_down() {
+        if input.key_w.is_down() {
             self.move_forward(delta_time);
         };
-        if input.keyS.is_down() {
+        if input.key_s.is_down() {
             self.move_forward(-delta_time);
         };
 
-        if input.keyA.is_down() {
+        if input.key_a.is_down() {
             self.move_right(delta_time);
         };
-        if input.keyD.is_down() {
+        if input.key_d.is_down() {
             self.move_right(-delta_time);
         };
-        if input.keyE.is_down() {
+        if input.key_e.is_down() {
             self.move_up(-delta_time);
         };
-        if input.keyQ.is_down() {
+        if input.key_q.is_down() {
             self.move_up(delta_time);
         };
 

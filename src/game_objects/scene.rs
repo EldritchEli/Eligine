@@ -1,19 +1,28 @@
+use std::collections::HashMap;
 use crate::game_objects::camera::Camera;
 use crate::input_state::InputState;
 use glam::Vec3;
 use std::f32::consts::PI;
-use tobj::Material;
 
+use tobj::Material;
+use uuid::Uuid;
+use crate::game_objects::render_object::RenderObject;
+use crate::game_objects::transform::Transform;
+use terrors::OneOf;
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub(crate) camera: Camera,
-    drawable_objects: Vec<tobj::Model>,
+    objects: HashMap<Uuid,RenderObject>,
     materials: Vec<Material>,
 }
 impl Scene {
-    pub fn load_object(path: &str) -> Scene {
-        todo!()
-    }
+  pub fn new_object_type(&mut self) -> Result<Uuid,OneOf<()>>{
+      let id = Uuid::new_v4();
+
+      self.objects.insert(id,)
+  }
+
+
     pub fn update(&mut self, delta: f32, input: &InputState) {
         self.camera.update(delta, input);
     }
@@ -31,7 +40,7 @@ impl Default for Scene {
         );
         Self {
             camera,
-            drawable_objects: Vec::default(),
+            objects: HashMap::default(),
             materials: Vec::default(),
         }
     }

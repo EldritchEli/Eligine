@@ -33,7 +33,7 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, MouseScrollDelta,
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
-use crate::game_objects::Scene::Scene;
+use crate::game_objects::scene::Scene;
 use crate::input_state::InputState;
 use crate::queue_family_indices::QueueFamilyIndices;
 use crate::render_app::{App, AppData};
@@ -63,6 +63,7 @@ fn main() -> Result<(), anyhow::Error> {
     // App
 
     let mut app = unsafe { App::create(&window)? };
+
 
     let mut minimized = false; //window minimize
 

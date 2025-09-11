@@ -14,6 +14,6 @@ layout(binding = 0) uniform UniformBufferObject {
 
 layout(binding = 1) uniform sampler2D texSampler;
 void main() {
-    float mult = sin(5.0*ubo.time);
+    float mult = sin(5.0 * ubo.time);
     outColor = texture(texSampler, fragTexCoord * 1.0);
 }

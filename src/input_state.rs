@@ -39,18 +39,18 @@ pub struct InputState {
     pub mouse_middle: KeyState,
     pub mouse_on_screen: bool,
 
-    pub keyW: KeyState,
-    pub keyA: KeyState,
-    pub keyS: KeyState,
-    pub keyQ: KeyState,
-    pub keyE: KeyState,
-    pub keyR: KeyState,
-    pub keyZ: KeyState,
-    pub keyX: KeyState,
-    pub keyC: KeyState,
-    pub keyV: KeyState,
-    pub keyEsc: KeyState,
-    pub keySpace: KeyState,
+    pub key_w: KeyState,
+    pub key_a: KeyState,
+    pub key_s: KeyState,
+    pub key_q: KeyState,
+    pub key_e: KeyState,
+    pub key_r: KeyState,
+    pub key_z: KeyState,
+    pub key_x: KeyState,
+    pub key_c: KeyState,
+    pub key_v: KeyState,
+    pub key_esc: KeyState,
+    pub key_space: KeyState,
     pub key1: KeyState,
     pub key2: KeyState,
     pub key3: KeyState,
@@ -61,14 +61,14 @@ pub struct InputState {
     pub key8: KeyState,
     pub key9: KeyState,
     pub key0: KeyState,
-    pub keyBackspace: KeyState,
+    pub key_backspace: KeyState,
 
-    pub keyD: KeyState,
-    pub keyH: KeyState,
-    pub keyAlt: KeyState,
-    pub keyCtrl: KeyState,
-    pub keyShift: KeyState,
-    pub keyEnter: KeyState,
+    pub key_d: KeyState,
+    pub key_h: KeyState,
+    pub key_alt: KeyState,
+    pub key_ctrl: KeyState,
+    pub key_shift: KeyState,
+    pub key_enter: KeyState,
     pub key_left: KeyState,
     pub key_right: KeyState,
     pub key_up: KeyState,
@@ -172,52 +172,52 @@ impl InputState {
         match physical {
             PhysicalKey::Code(key) => match key {
                 KeyCode::AltLeft => {
-                    self.keyAlt = InputState::set_key(&self.keyAlt, key, state);
+                    self.key_alt = InputState::set_key(&self.key_alt, key, state);
                 }
                 KeyCode::AltRight => {
-                    self.keyAlt = InputState::set_key(&self.keyAlt, key, state);
+                    self.key_alt = InputState::set_key(&self.key_alt, key, state);
                 }
                 KeyCode::ShiftLeft => {
-                    self.keyShift = InputState::set_key(&self.keyShift, key, state);
+                    self.key_shift = InputState::set_key(&self.key_shift, key, state);
                 }
                 KeyCode::ShiftRight => {
-                    self.keyShift = InputState::set_key(&self.keyShift, key, state);
+                    self.key_shift = InputState::set_key(&self.key_shift, key, state);
                 }
                 KeyCode::KeyW => {
-                    self.keyW = InputState::set_key(&self.keyW, key, state);
+                    self.key_w = InputState::set_key(&self.key_w, key, state);
                 }
                 KeyCode::KeyA => {
-                    self.keyA = InputState::set_key(&self.keyA, key, state);
+                    self.key_a = InputState::set_key(&self.key_a, key, state);
                 }
                 KeyCode::KeyD => {
-                    self.keyD = InputState::set_key(&self.keyD, key, state);
+                    self.key_d = InputState::set_key(&self.key_d, key, state);
                 }
                 KeyCode::KeyQ => {
-                    self.keyQ = InputState::set_key(&self.keyQ, key, state);
+                    self.key_q = InputState::set_key(&self.key_q, key, state);
                 }
                 KeyCode::KeyE => {
-                    self.keyE = InputState::set_key(&self.keyE, key, state);
+                    self.key_e = InputState::set_key(&self.key_e, key, state);
                 }
                 KeyCode::KeyZ => {
-                    self.keyZ = InputState::set_key(&self.keyZ, key, state);
+                    self.key_z = InputState::set_key(&self.key_z, key, state);
                 }
                 KeyCode::KeyX => {
-                    self.keyX = InputState::set_key(&self.keyX, key, state);
+                    self.key_x = InputState::set_key(&self.key_x, key, state);
                 }
                 KeyCode::KeyC => {
-                    self.keyC = InputState::set_key(&self.keyC, key, state);
+                    self.key_c = InputState::set_key(&self.key_c, key, state);
                 }
                 KeyCode::KeyV => {
-                    self.keyV = InputState::set_key(&self.keyV, key, state);
+                    self.key_v = InputState::set_key(&self.key_v, key, state);
                 }
                 KeyCode::Escape => {
-                    self.keyEsc = InputState::set_key(&self.keyEsc, key, state);
+                    self.key_esc = InputState::set_key(&self.key_esc, key, state);
                 }
                 KeyCode::KeyS => {
-                    self.keyS = InputState::set_key(&self.keyS, key, state);
+                    self.key_s = InputState::set_key(&self.key_s, key, state);
                 }
                 KeyCode::Space => {
-                    self.keySpace = InputState::set_key(&self.keySpace, key, state);
+                    self.key_space = InputState::set_key(&self.key_space, key, state);
                 }
                 KeyCode::Digit0 => {
                     self.key0 = InputState::set_key(&self.key0, key, state);
@@ -262,7 +262,7 @@ impl InputState {
                     self.key_down = InputState::set_key(&self.key_down, key, state);
                 }
                 KeyCode::Backspace => {
-                    self.keyBackspace = InputState::set_key(&self.keyBackspace, key, state);
+                    self.key_backspace = InputState::set_key(&self.key_backspace, key, state);
                 }
 
                 a => println!("{:?} {:?}", a, state),
@@ -339,18 +339,18 @@ impl Default for InputState {
             mouse_right: KeyState::Nothing,
             mouse_middle: KeyState::Nothing,
             mouse_on_screen: false,
-            keyW: KeyState::Nothing,
-            keyA: KeyState::Nothing,
-            keyS: KeyState::Nothing,
-            keyQ: KeyState::Nothing,
-            keyE: KeyState::Nothing,
-            keyR: KeyState::Nothing,
-            keyZ: KeyState::Nothing,
-            keyX: KeyState::Nothing,
-            keyC: KeyState::Nothing,
-            keyV: KeyState::Nothing,
-            keyEsc: KeyState::Nothing,
-            keySpace: KeyState::Nothing,
+            key_w: KeyState::Nothing,
+            key_a: KeyState::Nothing,
+            key_s: KeyState::Nothing,
+            key_q: KeyState::Nothing,
+            key_e: KeyState::Nothing,
+            key_r: KeyState::Nothing,
+            key_z: KeyState::Nothing,
+            key_x: KeyState::Nothing,
+            key_c: KeyState::Nothing,
+            key_v: KeyState::Nothing,
+            key_esc: KeyState::Nothing,
+            key_space: KeyState::Nothing,
             key1: KeyState::Nothing,
             key2: KeyState::Nothing,
             key3: KeyState::Nothing,
@@ -361,15 +361,15 @@ impl Default for InputState {
             key8: KeyState::Nothing,
             key9: KeyState::Nothing,
             key0: KeyState::Nothing,
-            keyD: KeyState::Nothing,
-            keyH: KeyState::Nothing,
-            keyAlt: KeyState::Nothing,
-            keyCtrl: KeyState::Nothing,
-            keyShift: KeyState::Nothing,
-            keyEnter: KeyState::Nothing,
+            key_d: KeyState::Nothing,
+            key_h: KeyState::Nothing,
+            key_alt: KeyState::Nothing,
+            key_ctrl: KeyState::Nothing,
+            key_shift: KeyState::Nothing,
+            key_enter: KeyState::Nothing,
             key_right: KeyState::Nothing,
             key_up: KeyState::Nothing,
-            keyBackspace: KeyState::Nothing,
+            key_backspace: KeyState::Nothing,
             key_left: KeyState::Nothing,
             key_down: KeyState::Nothing,
         }

@@ -1,8 +1,8 @@
-use crate::image_util::create_image_view;
-use crate::{AppData, QueueFamilyIndices};
-use vulkanalia::vk::{Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
 use vulkanalia::{vk, Device, Instance};
+use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
 use winit::window::Window;
+use crate::{AppData, QueueFamilyIndices};
+use crate::image_util::create_image_view;
 
 fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
     formats
@@ -15,11 +15,13 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
         .unwrap_or_else(|| formats[0])
 }
 
-fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
+fn get_swapchain_present_mode(
+    present_modes: &[vk::PresentModeKHR],
+) -> vk::PresentModeKHR {
     present_modes
         .iter()
         .cloned()
-        .find(|m| *m == vk::PresentModeKHR::MAILBOX)
+        .find(|m| *m == vk::PresentModeKHR::IMMEDIATE) // Immediate seems to work the best
         .unwrap_or(vk::PresentModeKHR::FIFO)
 }
 
@@ -90,6 +92,10 @@ pub unsafe fn create_swapchain(
 
     data.swapchain_format = surface_format.format;
     data.swapchain_extent = extent;
+
+
+
+
 
     /* It is also possible that you'll render images to a separate image first to perform
     operations like post-processing. In that case you may use a value like

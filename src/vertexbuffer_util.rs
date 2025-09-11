@@ -12,10 +12,11 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::BufReader;
+use std::path::PathBuf;
 use nalgebra_glm::{vec2, vec3, Vec2, Vec3};
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// texture coordinates and paths to texture file
 pub struct Texture { pub tex_string : String, pub tex_coords : Vec<Vec2> }
 /// color is either encoded as RGB triplets or texture coordinates and paths to texture file
@@ -33,8 +34,8 @@ pub enum Colors { RGB(Vec<Vec3>), Texture(Texture) }
      pub vertex_buffer_memory: vk::DeviceMemory,
  }
 
-pub fn load_model(data: &mut AppData) -> Result<()> {
-    let mut reader = BufReader::new(File::open("src/resources/viking_room.obj")?);
+pub fn load_model(data: &mut AppData, path: PathBuf) -> Result<()> {
+    let mut reader = BufReader::new(File::open(path)?);
 
     let (models,materials) = tobj::load_obj_buf(
         &mut reader,
@@ -151,6 +152,7 @@ impl Vertex {
             .stride(size_of::<Vertex>() as u32)
             .input_rate(vk::VertexInputRate::VERTEX)
             .build()
+
     }
 
     pub fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {

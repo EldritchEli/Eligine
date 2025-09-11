@@ -34,7 +34,7 @@ pub enum Colors { RGB(Vec<Vec3>), Texture(Texture) }
      pub vertex_buffer_memory: vk::DeviceMemory,
  }
 
-pub fn load_model(data: &mut AppData, path: PathBuf) -> Result<()> {
+/*pub fn load_model(data: &mut AppData, path: PathBuf) -> Result<()> {
     let mut reader = BufReader::new(File::open(path)?);
 
     let (models,materials) = tobj::load_obj_buf(
@@ -77,7 +77,7 @@ pub fn load_model(data: &mut AppData, path: PathBuf) -> Result<()> {
         }
     }
     Ok(())
-}
+}*/
 
 #[repr(C)]
 #[define_varlen]
@@ -184,44 +184,46 @@ pub(crate) unsafe fn create_vertex_buffer(
     device: &Device,
     data: &mut AppData,
 ) -> Result<()> {
-    let size = (size_of::<Vertex>() * data.vertices.len()/*VERTICES.len()*/) as u64;
+    for object in &data.objects {
 
-    let (staging_buffer, staging_buffer_memory) = create_buffer(
-        instance,
-        device,
-        data,
-        size,
-        vk::BufferUsageFlags::TRANSFER_SRC,
-        vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
-    )?;
+        let size = (size_of::<Vertex>() * object.vertices.len()/*VERTICES.len()*/) as u64;
 
-    let memory = device.map_memory(
-        staging_buffer_memory,
-        0,
-        size,
-        vk::MemoryMapFlags::empty(),
-    )?;
+        let (staging_buffer, staging_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
 
-    memcpy(data.vertices.as_ptr()/*VERTICES.as_ptr()*/, memory.cast(), data.vertices.len());
+        let memory = device.map_memory(
+            staging_buffer_memory,
+            0,
+            size,
+            vk::MemoryMapFlags::empty(),
+        )?;
 
-    device.unmap_memory(staging_buffer_memory);
+        memcpy(object.vertices.as_ptr()/*VERTICES.as_ptr()*/, memory.cast(), object.vertices.len());
 
-    let (vertex_buffer, vertex_buffer_memory) = create_buffer(
-        instance,
-        device,
-        data,
-        size,
-        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
-        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    )?;
-    copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
-    device.destroy_buffer(staging_buffer, None);
-    device.free_memory(staging_buffer_memory, None);
+        device.unmap_memory(staging_buffer_memory);
+
+        let (vertex_buffer, vertex_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
+        copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
 
 
-    data.vertex_buffer = vertex_buffer;
-    data.vertex_buffer_memory = vertex_buffer_memory;
-
+        data.vertex_buffer = vertex_buffer;
+        data.vertex_buffer_memory = vertex_buffer_memory;
+    }
     Ok(())
 }
 

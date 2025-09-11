@@ -7,29 +7,41 @@ use nalgebra_glm::{vec2, vec3};
 use terrors::OneOf;
 use uuid::Uuid;
 use tobj::{LoadError, Mesh};
+use vulkanalia::{Device, Instance};
+use vulkanalia::loader::LoaderError;
 use vulkanalia::vk::{Buffer, DescriptorSet, DeviceMemory};
 use crate::game_objects::transform::Transform;
+use crate::image_util::TextureData;
 use crate::render_app::AppData;
-use crate::vertexbuffer_util::{ Texture, Vertex};
+use crate::vertexbuffer_util::{load_model, Texture, Vertex};
 
 #[derive(Clone,Debug)]
 pub struct RenderObject {
-  vertices: Vec<Vertex>,
-  indices: Vec<u32>,
-
-  texture: Texture,
-  instances: HashMap<Uuid, RenderInstance>
+  pub vertices: Vec<Vertex>,
+  pub indices: Vec<u32>,
+  pub texture_data: TextureData,
+  pub instances: HashMap<Uuid, RenderInstance>
 }
 
 
 impl RenderObject {
+  pub unsafe fn load(
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+    model_path: PathBuf,
+    image_path: PathBuf) -> Result<RenderObject, OneOf<(io::Error, LoadError, anyhow::Error)>> {
+    let (vertices, indices) = Self::load_model(model_path).map_err(OneOf::broaden)?;
+    let texture_data = TextureData::create_texture(instance, device, data, image_path)
+      .map_err(OneOf::broaden)?;
+    Ok(Self { vertices, indices, texture_data, instances: Default::default(), })
+  }
 
 
-
-  pub fn load_model(path: PathBuf) -> Result<(Vec<Vertex>,Vec<u32>), OneOf<(io::Error,LoadError)>> {
+  pub fn load_model(model_path: PathBuf) -> Result<(Vec<Vertex>,Vec<u32>), OneOf<(io::Error,LoadError)>> {
     let mut vertices = vec![];
     let mut indices = vec![];
-    let mut reader = BufReader::new(File::open(path)
+    let mut reader = BufReader::new(File::open(model_path)
       .map_err(OneOf::broaden)?);
 
     let (models,materials) = tobj::load_obj_buf(
@@ -73,16 +85,6 @@ impl RenderObject {
     Ok((vertices, indices))
   }
 
-  pub fn new(model_path: PathBuf, texture: PathBuf) -> Result<Self, OneOf<(io::Error,LoadError)>> {
-
-    let (vertices, indices) = RenderObject::load_model(model_path)?;
-    Self {
-      vertices,
-      indices,
-      texture,
-      instances: HashMap::new(),
-    }
-  }
   pub fn insert_instance(&mut self, instance: RenderInstance) -> Result<Uuid,RenderInstance> {
     let id = Uuid::new_v4();
     match self.instances.insert(id, instance) {
@@ -92,6 +94,9 @@ impl RenderObject {
     }
   }
 
+  pub fn insert_from_transform(&mut self,transform: Transform ) -> Result<Uuid,RenderInstance> {
+    self.insert_instance(RenderInstance {transform})
+  }
   pub fn remove_instance(&mut self, id: &Uuid) -> Option<RenderInstance> {
     self.instances.remove(id)
   }
@@ -102,9 +107,9 @@ impl RenderObject {
 #[derive(Clone,Debug)]
 pub struct RenderInstance {
  pub transform: Transform,
- pub uniform_buffer: Buffer,
- pub uniform_buffer_memory: DeviceMemory,
- pub uniform_buffers_mapped: Uuid,
- pub descriptor_sets: Vec<DescriptorSet>,
+ //pub uniform_buffer: Buffer,
+ //pub uniform_buffer_memory: DeviceMemory,
+ //pub uniform_buffers_mapped: Uuid,
+ //pub descriptor_sets: Vec<DescriptorSet>,
 
 }

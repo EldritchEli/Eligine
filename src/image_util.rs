@@ -3,18 +3,49 @@ use std::fs::File;
 use std::intrinsics::copy_nonoverlapping as memcpy;
 
 use std::path;
+use std::path::PathBuf;
 use vulkanalia::{vk, Device, Instance};
 use crate::render_app::AppData;
 use anyhow::{anyhow, Result};
 use vulkanalia::vk::{DeviceV1_0, HasBuilder, InstanceV1_0};
 use crate::buffer_util::{begin_single_time_commands, create_buffer, end_single_time_commands, get_memory_type_index};
+
+
+#[derive(Clone,Debug)]
+pub struct TextureData {
+
+    pub mip_levels: u32,
+    pub image: vk::Image,
+    pub image_memory: vk::DeviceMemory,
+    pub image_view: vk::ImageView,
+    pub sampler: vk::Sampler,
+
+}
+
+impl TextureData {
+
+pub unsafe fn create_texture(instance: &Instance, device: &Device, data: &mut AppData, image_path: PathBuf) -> Result<TextureData> {
+    let (mip_levels, image, image_memory) =
+      Self::create_texture_image(instance, device, data, image_path)?;
+    let image_view = Self::create_texture_image_view(image, mip_levels, &device,data)?;
+    let sampler = Self::create_texture_sampler(mip_levels, device)?;
+    Ok( Self {
+        mip_levels,
+        image,
+        image_memory,
+        image_view,
+        sampler,
+    })
+
+
+}
 pub unsafe fn create_texture_image(
     instance: &Instance,
     device: &Device,
     data: &mut AppData,
-    image_path : path::PathBuf,
-) -> Result<()> {
-    let image =  match File::open(image_path){
+    image_path : PathBuf,
+) -> Result<(u32, vk::Image, vk::DeviceMemory)> {
+    let image =  match File::open(image_path) {
         Ok(f) => f,
         Err(e) => return Err(anyhow!(e)),
     };
@@ -30,7 +61,7 @@ pub unsafe fn create_texture_image(
     let (width, height) = reader.info().size();
 
 
-    data.mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
+    let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
     let (staging_buffer, staging_buffer_memory) = create_buffer(
         instance,
         device,
@@ -57,7 +88,7 @@ pub unsafe fn create_texture_image(
         data,
         width,
         height,
-        data.mip_levels,
+        mip_levels,
         vk::SampleCountFlags::_1,
         vk::Format::R8G8B8A8_SRGB,
         vk::ImageTiling::OPTIMAL,
@@ -66,25 +97,24 @@ pub unsafe fn create_texture_image(
             | vk::ImageUsageFlags::TRANSFER_SRC,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     )?;
-
-    data.texture_image = texture_image;
-    data.texture_image_memory = texture_image_memory;
+    texture_image;
+    texture_image_memory;
 
     transition_image_layout(
         device,
         data,
-        data.texture_image,
+        texture_image,
         vk::Format::R8G8B8A8_SRGB,
         vk::ImageLayout::UNDEFINED,
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        data.mip_levels,
+       mip_levels,
     )?;
 
     copy_buffer_to_image(
         device,
         data,
         staging_buffer,
-        data.texture_image,
+        texture_image,
         width,
         height,
     )?;
@@ -96,13 +126,52 @@ pub unsafe fn create_texture_image(
         instance,
         device,
         data,
-        data.texture_image,
+        texture_image,
         vk::Format::R8G8B8A8_SRGB,
         width,
         height,
-        data.mip_levels,
+        mip_levels,
     )?;
-    Ok(())
+    Ok((mip_levels, texture_image, texture_image_memory))
+}
+
+
+    pub unsafe fn create_texture_image_view(texture_image: vk::Image,
+                                            mip_levels: u32,
+                                            device: &Device,
+                                            data: &mut AppData) -> Result<vk::ImageView> {
+        Ok(create_image_view(
+            device,
+            texture_image,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageAspectFlags::COLOR,
+            mip_levels
+        )?)
+
+
+    }
+
+    pub unsafe fn create_texture_sampler(mip_levels: u32, device: &Device, ) -> Result<vk::Sampler> {
+
+        let info = vk::SamplerCreateInfo::builder()
+          .mag_filter(vk::Filter::LINEAR)
+          .min_filter(vk::Filter::LINEAR)
+          .address_mode_u(vk::SamplerAddressMode::REPEAT)
+          .address_mode_v(vk::SamplerAddressMode::REPEAT)
+          .address_mode_w(vk::SamplerAddressMode::REPEAT)
+          .anisotropy_enable(true)
+          .max_anisotropy(16.0)
+          .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+          .unnormalized_coordinates(false)
+          .compare_enable(false)
+          .compare_op(vk::CompareOp::ALWAYS)
+          .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+          .mip_lod_bias(0.0)
+          .min_lod(0.0)
+          .max_lod(mip_levels as f32);
+        Ok(device.create_sampler(&info, None)?)
+
+    }
 }
 
 
@@ -264,17 +333,6 @@ unsafe fn copy_buffer_to_image(
     Ok(())
 }
 
-pub unsafe fn create_texture_image_view(device: &Device, data: &mut AppData) -> Result<()> {
-    data.texture_image_view = create_image_view(
-        device,
-        data.texture_image,
-        vk::Format::R8G8B8A8_SRGB,
-        vk::ImageAspectFlags::COLOR,
-        data.mip_levels
-    )?;
-
-    Ok(())
-}
 
 
 pub unsafe fn create_image_view(
@@ -301,31 +359,6 @@ pub unsafe fn create_image_view(
 }
 
 
-pub unsafe fn create_texture_sampler(device: &Device, data: &mut AppData) -> Result<()> {
-
-    let info = vk::SamplerCreateInfo::builder()
-        .mag_filter(vk::Filter::LINEAR)
-        .min_filter(vk::Filter::LINEAR)
-        .address_mode_u(vk::SamplerAddressMode::REPEAT)
-        .address_mode_v(vk::SamplerAddressMode::REPEAT)
-        .address_mode_w(vk::SamplerAddressMode::REPEAT)
-        .anisotropy_enable(true)
-        .max_anisotropy(16.0)
-        .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
-        .unnormalized_coordinates(false)
-        .compare_enable(false)
-        .compare_op(vk::CompareOp::ALWAYS)
-        .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
-        .mip_lod_bias(0.0)
-        .min_lod(0.0)
-        .max_lod(data.mip_levels as f32);
-    data.texture_sampler = device.create_sampler(&info, None)?;
-
-
-
-    // continued...
-    Ok(())
-}
 
 
 unsafe fn generate_mipmaps(

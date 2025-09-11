@@ -12,28 +12,25 @@ use crate::render_pass_util::create_render_pass;
 use crate::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::sync_util::create_sync_objects;
 use crate::vertexbuffer_util::{
-    create_index_buffer, create_vertex_buffer, load_model, Vertex, VertexData,
+    create_index_buffer, create_vertex_buffer,
 };
 use crate::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
-use anyhow::anyhow;
+use anyhow::{anyhow};
 use std::f32::consts::PI;
 use std::time::Instant;
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
-use vulkanalia::vk::{
-    DeviceV1_0, ExtDebugUtilsExtension, Handle, HasBuilder, InstanceV1_0, KhrSurfaceExtension,
-    KhrSwapchainExtension,
-};
+use vulkanalia::vk::{DeviceV1_0, ExtDebugUtilsExtension, Handle, HasBuilder, InstanceV1_0, KhrSurfaceExtension, KhrSwapchainExtension, ObjectType};
 use vulkanalia::window as vk_window;
 use vulkanalia::{vk, Device, Entry, Instance};
 use winit::window::Window;
 
 use crate::color_objects::create_color_objects;
 use crate::game_objects::scene::Scene;
-use crate::image_util::{create_texture_image, create_texture_image_view, create_texture_sampler};
 use crate::uniform_buffer_object::UniformBufferObject;
 use glam::Mat4;
-use log::info;
 use std::ptr::copy_nonoverlapping as memcpy;
+use crate::game_objects::render_object::RenderObject;
+use crate::game_objects::transform::Transform;
 
 /// Our Vulkan app.
 #[derive(Clone, Debug)]
@@ -90,11 +87,6 @@ pub struct AppData {
     pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub descriptor_pool: vk::DescriptorPool,
 
-    pub mip_levels: u32,
-    pub texture_image: vk::Image,
-    pub texture_image_memory: vk::DeviceMemory,
-    pub texture_image_view: vk::ImageView,
-    pub texture_sampler: vk::Sampler,
 
     pub depth_image: vk::Image,
     pub depth_image_memory: vk::DeviceMemory,
@@ -103,7 +95,7 @@ pub struct AppData {
     pub(crate) color_image: vk::Image,
     pub(crate) color_image_memory: vk::DeviceMemory,
     pub(crate) color_image_view: vk::ImageView,
-
+    pub objects: Vec<RenderObject>,
     pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub vertex_buffer: vk::Buffer,
     pub vertex_buffer_memory: vk::DeviceMemory,
@@ -131,16 +123,27 @@ impl App {
         create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
         create_framebuffers(&device, &mut data)?;
-        create_texture_image(
+       // create_texture_image(
+       //     &instance,
+       //     &device,
+       //     &mut data,
+       //     "src/resources/viking_room.png".parse()?,
+       // )?;
+       // create_texture_image_view(&device, &mut data)?;
+       // create_texture_sampler(&device, &mut data)?;
+        create_transient_command_pool(&instance, &device, &mut data)?;
+        let mut object = match RenderObject::load(
             &instance,
             &device,
             &mut data,
-            "src/resources/viking_room.png".parse()?,
-        )?;
-        create_texture_image_view(&device, &mut data)?;
-        create_texture_sampler(&device, &mut data)?;
-        create_transient_command_pool(&instance, &device, &mut data)?;
-        load_model(&mut data)?;
+            "src/resources/viking_room.obj".parse()?,
+            "src/resources/viking_room.png".parse()?) {
+            Ok(object) => object,
+            Err(e) => anyhow::bail!("{}", e),
+        };
+        object.insert_from_transform(Transform::default())
+          .map_err(|b| anyhow!("{}", b))?;
+        data.objects.push(object);
         create_vertex_buffer(&instance, &device, &mut data)?;
         create_index_buffer(&instance, &device, &mut data)?;
         create_uniform_buffers(&instance, &device, &mut data)?;
@@ -309,13 +312,16 @@ impl App {
     pub(crate) unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
-        self.device.destroy_sampler(self.data.texture_sampler, None);
-        self.device
-            .destroy_image_view(self.data.texture_image_view, None);
+        for object in self.data.objects {
 
-        self.device.destroy_image(self.data.texture_image, None);
-        self.device
-            .free_memory(self.data.texture_image_memory, None);
+            self.device.destroy_sampler(object.texture_data.sampler, None);
+            self.device
+              .destroy_image_view(object.texture_data.image_view, None);
+
+            self.device.destroy_image(object.texture_data.image, None);
+            self.device
+              .free_memory(object.texture_data.image_memory, None);
+        }
 
         self.device
             .destroy_descriptor_set_layout(self.data.descriptor_set_layout, None);
@@ -389,4 +395,5 @@ impl App {
         self.device.destroy_swapchain_khr(self.data.swapchain, None);
     }
 }
+
 

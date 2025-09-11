@@ -12,15 +12,11 @@ use terrors::OneOf;
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub(crate) camera: Camera,
-    objects: HashMap<Uuid,RenderObject>,
+
     materials: Vec<Material>,
 }
 impl Scene {
-  pub fn new_object_type(&mut self) -> Result<Uuid,OneOf<()>>{
-      let id = Uuid::new_v4();
 
-      self.objects.insert(id,)
-  }
 
 
     pub fn update(&mut self, delta: f32, input: &InputState) {
@@ -40,7 +36,7 @@ impl Default for Scene {
         );
         Self {
             camera,
-            objects: HashMap::default(),
+
             materials: Vec::default(),
         }
     }

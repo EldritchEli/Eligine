@@ -10,45 +10,65 @@ use tobj::{LoadError, Mesh};
 use vulkanalia::{Device, Instance};
 use vulkanalia::loader::LoaderError;
 use vulkanalia::vk::{Buffer, DescriptorSet, DeviceMemory};
+use crate::descriptor_util::{create_descriptor_sets, create_uniform_buffers};
 use crate::game_objects::transform::Transform;
 use crate::image_util::TextureData;
 use crate::render_app::AppData;
-use crate::vertexbuffer_util::{load_model, Texture, Vertex};
+use crate::vertexbuffer_util::{Texture, Vertex, VertexData};
 
 #[derive(Clone,Debug)]
 pub struct RenderObject {
-  pub vertices: Vec<Vertex>,
-  pub indices: Vec<u32>,
-  pub texture_data: TextureData,
-  pub instances: HashMap<Uuid, RenderInstance>
+    pub vertex_data: VertexData,
+    pub texture_data: TextureData,
+    pub uniform_buffers: Vec<Buffer>,
+    pub uniform_buffers_memory: Vec<DeviceMemory>,
+    pub descriptor_sets: Vec<DescriptorSet>,
+    pub instances: HashMap<Uuid, RenderInstance>
 }
 
 
 impl RenderObject {
-  pub unsafe fn load(
-    instance: &Instance,
-    device: &Device,
-    data: &mut AppData,
-    model_path: PathBuf,
-    image_path: PathBuf) -> Result<RenderObject, OneOf<(io::Error, LoadError, anyhow::Error)>> {
-    let (vertices, indices) = Self::load_model(model_path).map_err(OneOf::broaden)?;
-    let texture_data = TextureData::create_texture(instance, device, data, image_path)
-      .map_err(OneOf::broaden)?;
-    Ok(Self { vertices, indices, texture_data, instances: Default::default(), })
+    pub unsafe fn load(
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        model_path: PathBuf,
+        image_path: PathBuf)
+        -> Result<RenderObject, OneOf<(io::Error, LoadError, anyhow::Error)>> {
+        let (vertices, indices) = Self::load_model(model_path)
+          .map_err(OneOf::broaden)?;
+        let texture_data = TextureData::create_texture(instance, device, data, image_path)
+          .map_err(|e| OneOf::new(e))?;
+        let vertex_data = VertexData::create_vertex_data(instance, device, data, vertices, indices)
+          .map_err(|e| OneOf::new(e))?;
+        let mut uniform_buffers = vec![];
+        let mut uniform_buffers_memory = vec![];
+        create_uniform_buffers(instance, device, data, &mut uniform_buffers, &mut uniform_buffers_memory)
+          .map_err(|e| OneOf::new(e))?;
+        let mut object = Self {
+          vertex_data,
+          texture_data,
+          uniform_buffers,
+          uniform_buffers_memory,
+          descriptor_sets: vec![],
+          instances: Default::default(), };
+        create_descriptor_sets(device, data, &mut object).map_err(|e| OneOf::new(e))?;
+        Ok(object)
   }
+
 
 
   pub fn load_model(model_path: PathBuf) -> Result<(Vec<Vertex>,Vec<u32>), OneOf<(io::Error,LoadError)>> {
     let mut vertices = vec![];
     let mut indices = vec![];
     let mut reader = BufReader::new(File::open(model_path)
-      .map_err(OneOf::broaden)?);
+      .map_err(|e | OneOf::new(e))?);
 
     let (models,materials) = tobj::load_obj_buf(
       &mut reader,
       &tobj::LoadOptions { triangulate: true, ..Default::default() },
       |_| Ok(Default::default()),
-    ).map_err(OneOf::broaden)?;
+    ).map_err(|e| OneOf::new(e))?;
 
     let mut unique_vertices = HashMap::new();
 

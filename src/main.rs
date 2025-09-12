@@ -24,7 +24,6 @@ mod shader_module_util;
 mod swapchain_util;
 mod sync_util;
 mod uniform_buffer_object;
-mod varlen;
 mod vertexbuffer_util;
 
 

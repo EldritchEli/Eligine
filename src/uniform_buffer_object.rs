@@ -9,7 +9,7 @@ pub struct UniformBufferObject {
     pub view: Mat4,
     pub proj: Mat4,
     pub inv_view: Mat4,
-    pub time: f32
+
 }
 
 

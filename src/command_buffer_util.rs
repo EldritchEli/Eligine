@@ -50,26 +50,29 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> any
             vk::PipelineBindPoint::GRAPHICS,
             data.pipeline,
         );
-        device.cmd_bind_vertex_buffers(*command_buffer, 0, &[data.vertex_buffer], &[0]);
-        device.cmd_bind_index_buffer(*command_buffer, data.index_buffer, 0, vk::IndexType::UINT32);
+        for object in &data.objects {
 
-        device.cmd_bind_descriptor_sets(
-            *command_buffer,
-            vk::PipelineBindPoint::GRAPHICS,
-            data.pipeline_layout,
-            0,
-            &[data.descriptor_sets[i]],
-            &[],
-        );
+            device.cmd_bind_vertex_buffers(*command_buffer, 0, &[object.vertex_data.vertex_buffer], &[0]);
+            device.cmd_bind_index_buffer(*command_buffer, object.vertex_data.index_buffer, 0, vk::IndexType::UINT32);
 
-        device.cmd_draw_indexed(
-            *command_buffer,
-            data.indices.len()/*INDICES.len()*/ as u32,
-            1,
-            0,
-            0,
-            0,
-        );
+            device.cmd_bind_descriptor_sets(
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                data.pipeline_layout,
+                0,
+                &[object.descriptor_sets[i]],
+                &[],
+            );
+
+            device.cmd_draw_indexed(
+                *command_buffer,
+                object.vertex_data.indices.len()/*INDICES.len()*/ as u32,
+                object.instances.len() as u32,
+                0,
+                0,
+                0,
+            );
+        }
 
         //device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
 

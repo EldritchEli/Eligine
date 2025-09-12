@@ -12,7 +12,7 @@ use crate::render_pass_util::create_render_pass;
 use crate::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::sync_util::create_sync_objects;
 use crate::vertexbuffer_util::{
-    create_index_buffer, create_vertex_buffer,
+
 };
 use crate::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::{anyhow};
@@ -81,10 +81,10 @@ pub struct AppData {
 
     //pub vertex_buffer: vk::Buffer,
     //pub vertex_buffer_memory: vk::DeviceMemory,
-    pub index_buffer: vk::Buffer,
-    pub index_buffer_memory: vk::DeviceMemory,
-    pub uniform_buffers: Vec<vk::Buffer>,
-    pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
+   // pub index_buffer: vk::Buffer,
+   // pub index_buffer_memory: vk::DeviceMemory,
+    //pub uniform_buffers: Vec<vk::Buffer>,
+    //pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub descriptor_pool: vk::DescriptorPool,
 
 
@@ -96,9 +96,9 @@ pub struct AppData {
     pub(crate) color_image_memory: vk::DeviceMemory,
     pub(crate) color_image_view: vk::ImageView,
     pub objects: Vec<RenderObject>,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
-    pub vertex_buffer: vk::Buffer,
-    pub vertex_buffer_memory: vk::DeviceMemory,
+    //pub descriptor_sets: Vec<vk::DescriptorSet>,
+   // pub vertex_buffer: vk::Buffer,
+   // pub vertex_buffer_memory: vk::DeviceMemory,
 }
 impl App {
     /// Creates our Vulkan app.
@@ -132,6 +132,7 @@ impl App {
        // create_texture_image_view(&device, &mut data)?;
        // create_texture_sampler(&device, &mut data)?;
         create_transient_command_pool(&instance, &device, &mut data)?;
+        create_descriptor_pool(&device, &mut data,3)?;
         let mut object = match RenderObject::load(
             &instance,
             &device,
@@ -142,13 +143,12 @@ impl App {
             Err(e) => anyhow::bail!("{}", e),
         };
         object.insert_from_transform(Transform::default())
-          .map_err(|b| anyhow!("{}", b))?;
+          .map_err(|b| anyhow!("{:?}", b))?;
         data.objects.push(object);
-        create_vertex_buffer(&instance, &device, &mut data)?;
-        create_index_buffer(&instance, &device, &mut data)?;
-        create_uniform_buffers(&instance, &device, &mut data)?;
-        create_descriptor_pool(&device, &mut data)?;
-        create_descriptor_sets(&device, &mut data)?;
+        //create_vertex_buffer(&instance, &device, &mut data)?;
+        //create_index_buffer(&instance, &device, &mut data)?;
+        //create_uniform_buffers(&instance, &device, &mut data)?;
+        //create_descriptor_sets(&device, &mut data)?;
 
         create_command_buffers(&device, &mut data)?;
         create_sync_objects(&device, &mut data)?;
@@ -166,6 +166,7 @@ impl App {
     }
 
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> anyhow::Result<()> {
+        println!("recreate_swapchain");
         self.device.device_wait_idle()?;
         self.destroy_swapchain();
         create_swapchain(window, &self.instance, &self.device, &mut self.data)?;
@@ -175,16 +176,23 @@ impl App {
         create_color_objects(&self.instance, &self.device, &mut self.data)?;
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
-        create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
-        create_descriptor_pool(&self.device, &mut self.data)?;
-        create_descriptor_sets(&self.device, &mut self.data)?;
+        //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
+        create_descriptor_pool(&self.device, &mut self.data,3)?;
+        for index in 0..self.data.objects.len() {
+            let mut object = self.data.objects[index].clone();
+            create_uniform_buffers(&self.instance, &self.device, &mut self.data, &mut object.uniform_buffers,
+                                   &mut object.uniform_buffers_memory)?;
+            create_descriptor_sets(&self.device, &mut self.data, &mut object)?;
+            self.data.objects[index] = object;
+        }
+        //create_descriptor_sets(&self.device, &mut self.data)?;
         create_command_buffers(&self.device, &mut self.data)?;
         Ok(())
     }
 
     pub unsafe fn update_uniform_buffer(&self, image_index: usize) -> anyhow::Result<()> {
+        let mut ubos = vec![];
         let time = self.start.elapsed().as_secs_f32();
-        let model: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time) * Mat4::from_rotation_x(PI / 2.0);
 
         let view = self.scene.camera.transform.matrix();
         let inv_view = view.inverse();
@@ -213,25 +221,27 @@ impl App {
         let perspective = Mat4::perspective_rh(PI / 6.0, aspect, 0.1, 100.0);
         let proj = correction * perspective;
 
-        let ubo = UniformBufferObject {
-            model,
-            view,
-            inv_view,
-            proj,
-            time: self.start.elapsed().as_secs_f32(),
-        };
-        let memory = self.device.map_memory(
-            self.data.uniform_buffers_memory[image_index],
-            0,
-            size_of::<UniformBufferObject>() as u64,
-            vk::MemoryMapFlags::empty(),
-        )?;
+        let modelRotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time) * Mat4::from_rotation_x(PI / 2.0);
+        for object in self.data.objects.iter(){
+            for (id,instance) in object.instances.iter() {
+                let model: Mat4 = modelRotation * instance.transform.matrix();
+                let ubo = UniformBufferObject { model, view, inv_view, proj, };
+                ubos.push(ubo);
+            }
+            let memory = self.device.map_memory(
+                object.uniform_buffers_memory[image_index],
+                0,
+                ubos.len() as u64 *size_of::<UniformBufferObject>() as u64,
+                vk::MemoryMapFlags::empty(),
+            )?;
 
-        memcpy(&ubo, memory.cast(), 1);
+            memcpy(&ubos, memory.cast(), 1);
 
-        self.device
-            .unmap_memory(self.data.uniform_buffers_memory[image_index]);
+            self.device
+              .unmap_memory(object.uniform_buffers_memory[image_index]);
 
+
+        }
         Ok(())
     }
 
@@ -312,7 +322,7 @@ impl App {
     pub(crate) unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
-        for object in self.data.objects {
+        for object in &self.data.objects {
 
             self.device.destroy_sampler(object.texture_data.sampler, None);
             self.device
@@ -338,11 +348,14 @@ impl App {
             .image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        self.device
-            .free_memory(self.data.vertex_buffer_memory, None);
-        self.device.destroy_buffer(self.data.vertex_buffer, None);
-        self.device.free_memory(self.data.index_buffer_memory, None);
-        self.device.destroy_buffer(self.data.index_buffer, None);
+        for object in &self.data.objects {
+            self.device
+              .free_memory(object.vertex_data.vertex_buffer_memory, None);
+            self.device.destroy_buffer(object.vertex_data.vertex_buffer, None);
+            self.device.free_memory(object.vertex_data.index_buffer_memory, None);
+            self.device.destroy_buffer(object.vertex_data.index_buffer, None);
+        }
+
 
         self.device
             .destroy_command_pool(self.data.command_pool, None);
@@ -370,7 +383,16 @@ impl App {
         self.device.destroy_image(self.data.depth_image, None);
         self.device
             .destroy_descriptor_pool(self.data.descriptor_pool, None);
-        self.data
+        self.data.objects.iter().for_each(|object| {
+            object.uniform_buffers
+              .iter()
+              .for_each(|b| self.device.destroy_buffer(*b, None));
+            object.uniform_buffers_memory
+              .iter()
+              .for_each(|m| self.device.free_memory(*m, None));
+        });
+
+        /*self.data
             .uniform_buffers
             .iter()
             .for_each(|b| self.device.destroy_buffer(*b, None));
@@ -378,6 +400,7 @@ impl App {
             .uniform_buffers_memory
             .iter()
             .for_each(|m| self.device.free_memory(*m, None));
+        */
         self.data
             .framebuffers
             .iter()

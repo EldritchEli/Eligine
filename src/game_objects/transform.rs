@@ -1,3 +1,4 @@
+use std::f32::consts::PI;
 use glam::{Mat4, Quat, Vec3};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -14,7 +15,7 @@ impl Default for Transform {
         Self {
             position: Vec3::ZERO,
             scale: Vec3::ONE,
-            rotation: Quat::default(),
+            rotation: Quat::from_rotation_x(PI/2.0),
         }
     }
 }
@@ -35,7 +36,7 @@ impl Transform {
     }
     pub fn from_rotation(rotation: Quat) -> Self {
         Self {
-            rotation,
+            rotation :  Quat::from_rotation_x(PI/2.0)*rotation,
             ..Default::default()
         }
     }

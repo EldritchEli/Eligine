@@ -12,7 +12,7 @@ use terrors::OneOf;
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub(crate) camera: Camera,
-
+    pub render_objects: Vec<RenderObject>,
     materials: Vec<Material>,
 }
 impl Scene {
@@ -36,6 +36,7 @@ impl Default for Scene {
         );
         Self {
             camera,
+            render_objects: Vec::new(),
 
             materials: Vec::default(),
         }

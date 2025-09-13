@@ -31,7 +31,7 @@ use glam::Mat4;
 use std::ptr::copy_nonoverlapping as memcpy;
 use crate::game_objects::render_object::RenderObject;
 use crate::game_objects::transform::Transform;
-
+use glam::Vec3;
 /// Our Vulkan app.
 #[derive(Clone, Debug)]
 pub struct App {
@@ -95,7 +95,7 @@ pub struct AppData {
     pub(crate) color_image: vk::Image,
     pub(crate) color_image_memory: vk::DeviceMemory,
     pub(crate) color_image_view: vk::ImageView,
-    pub objects: Vec<RenderObject>,
+
     //pub descriptor_sets: Vec<vk::DescriptorSet>,
    // pub vertex_buffer: vk::Buffer,
    // pub vertex_buffer_memory: vk::DeviceMemory,
@@ -105,6 +105,7 @@ impl App {
     pub(crate) unsafe fn create(window: &Window) -> anyhow::Result<Self> {
         let resized = false;
         let loader = LibloadingLoader::new(LIBRARY)?;
+        let mut scene = Scene::default();
         let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
         let mut data = AppData::default();
         let instance = create_instance(window, &entry, &mut data)?;
@@ -142,22 +143,31 @@ impl App {
             Ok(object) => object,
             Err(e) => anyhow::bail!("{}", e),
         };
+        for i in 0..3 {
+            for j in 0..3 {
+
+                object.insert_from_transform(Transform::from_position(Vec3::new(1.0+(i*3) as f32, 0.0, (-j*3) as f32)))
+                  .map_err(|b| anyhow!("{:?}", b))?;
+            }
+
+        }
         object.insert_from_transform(Transform::default())
           .map_err(|b| anyhow!("{:?}", b))?;
-        data.objects.push(object);
+        scene.render_objects.push(object);
+
         //create_vertex_buffer(&instance, &device, &mut data)?;
         //create_index_buffer(&instance, &device, &mut data)?;
         //create_uniform_buffers(&instance, &device, &mut data)?;
         //create_descriptor_sets(&device, &mut data)?;
 
-        create_command_buffers(&device, &mut data)?;
+        create_command_buffers(&device, &mut scene, &mut data)?;
         create_sync_objects(&device, &mut data)?;
 
         Ok(Self {
             entry,
             instance,
             data,
-            scene: Default::default(),
+            scene,
             device,
             frame: 0,
             resized,
@@ -178,20 +188,17 @@ impl App {
         create_framebuffers(&self.device, &mut self.data)?;
         //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data,3)?;
-        for index in 0..self.data.objects.len() {
-            let mut object = self.data.objects[index].clone();
+        for object in self.scene.render_objects.iter_mut() {
             create_uniform_buffers(&self.instance, &self.device, &mut self.data, &mut object.uniform_buffers,
                                    &mut object.uniform_buffers_memory)?;
-            create_descriptor_sets(&self.device, &mut self.data, &mut object)?;
-            self.data.objects[index] = object;
+            create_descriptor_sets(&self.device, &mut self.data,  object)?;
         }
         //create_descriptor_sets(&self.device, &mut self.data)?;
-        create_command_buffers(&self.device, &mut self.data)?;
+        create_command_buffers(&self.device, &mut self.scene, &mut self.data)?;
         Ok(())
     }
 
     pub unsafe fn update_uniform_buffer(&self, image_index: usize) -> anyhow::Result<()> {
-        let mut ubos = vec![];
         let time = self.start.elapsed().as_secs_f32();
 
         let view = self.scene.camera.transform.matrix();
@@ -218,24 +225,24 @@ impl App {
         ]);
         let aspect =
             self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32;
-        let perspective = Mat4::perspective_rh(PI / 6.0, aspect, 0.1, 100.0);
+        let perspective = Mat4::perspective_rh(PI / 4.0, aspect, 0.1, 100.0);
         let proj = correction * perspective;
 
-        let modelRotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time) * Mat4::from_rotation_x(PI / 2.0);
-        for object in self.data.objects.iter(){
-            for (id,instance) in object.instances.iter() {
-                let model: Mat4 = modelRotation * instance.transform.matrix();
-                let ubo = UniformBufferObject { model, view, inv_view, proj, };
-                ubos.push(ubo);
+        let model_rotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time)  ;
+        for object in self.scene.render_objects.iter(){
+            let mut model = [Mat4::default();10];
+            for (index,(id,instance)) in object.instances.iter().enumerate() {
+                model[index] = instance.transform.matrix();
             }
+            let ubo = UniformBufferObject { view, proj, inv_view, model };
             let memory = self.device.map_memory(
                 object.uniform_buffers_memory[image_index],
                 0,
-                ubos.len() as u64 *size_of::<UniformBufferObject>() as u64,
+                size_of::<UniformBufferObject>() as u64,
                 vk::MemoryMapFlags::empty(),
             )?;
 
-            memcpy(&ubos, memory.cast(), 1);
+            memcpy(&ubo, memory.cast(), 1);
 
             self.device
               .unmap_memory(object.uniform_buffers_memory[image_index]);
@@ -322,7 +329,7 @@ impl App {
     pub(crate) unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
-        for object in &self.data.objects {
+        for object in &self.scene.render_objects {
 
             self.device.destroy_sampler(object.texture_data.sampler, None);
             self.device
@@ -348,7 +355,7 @@ impl App {
             .image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        for object in &self.data.objects {
+        for object in &self.scene.render_objects {
             self.device
               .free_memory(object.vertex_data.vertex_buffer_memory, None);
             self.device.destroy_buffer(object.vertex_data.vertex_buffer, None);
@@ -383,7 +390,7 @@ impl App {
         self.device.destroy_image(self.data.depth_image, None);
         self.device
             .destroy_descriptor_pool(self.data.descriptor_pool, None);
-        self.data.objects.iter().for_each(|object| {
+        self.scene.render_objects.iter().for_each(|object| {
             object.uniform_buffers
               .iter()
               .for_each(|b| self.device.destroy_buffer(*b, None));

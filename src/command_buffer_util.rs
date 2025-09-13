@@ -1,8 +1,9 @@
 use crate::render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use vulkanalia::{vk, Device};
+use crate::game_objects::scene::Scene;
 
-pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
+pub unsafe fn create_command_buffers(device: &Device, scene: &mut Scene, data: &mut AppData) -> anyhow::Result<()> {
     let allocate_info = vk::CommandBufferAllocateInfo::builder()
         .command_pool(data.command_pool)
         .level(vk::CommandBufferLevel::PRIMARY)
@@ -50,7 +51,7 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> any
             vk::PipelineBindPoint::GRAPHICS,
             data.pipeline,
         );
-        for object in &data.objects {
+        for object in &scene.render_objects {
 
             device.cmd_bind_vertex_buffers(*command_buffer, 0, &[object.vertex_data.vertex_buffer], &[0]);
             device.cmd_bind_index_buffer(*command_buffer, object.vertex_data.index_buffer, 0, vk::IndexType::UINT32);

@@ -1,6 +1,6 @@
 use crate::game_objects::transform::Transform;
-use crate::input_state::InputState;
-use glam::{Mat4, Quat, Vec3};
+use crate::vulkan::input_state::InputState;
+use glam::{Quat, Vec3};
 use std::cmp::PartialEq;
 #[derive(PartialEq, Clone, Debug)]
 pub struct Camera {

@@ -21,4 +21,9 @@ glam = "0.30.5"
 bevy = "0.16.1"
 uuid = "1.18.1"
 terrors = "0.3.3"
+gltf = "1.4.1"
+easy-gltf = { version = "1.1.5", features = ["extras", "names", "vertex-color"] }
+bevy_pbr = "0.16.1"
+bevy_mesh = "0.16.1"
+slab = "0.4.11"
 

@@ -1,5 +1,5 @@
-use std::f32::consts::PI;
 use glam::{Mat4, Quat, Vec3};
+use std::f32::consts::PI;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Transform {
@@ -8,14 +8,12 @@ pub struct Transform {
     pub rotation: Quat,
 }
 
-
-
 impl Default for Transform {
     fn default() -> Self {
         Self {
             position: Vec3::ZERO,
             scale: Vec3::ONE,
-            rotation: Quat::from_rotation_x(PI/2.0),
+            rotation: Quat::from_rotation_x(PI / 2.0),
         }
     }
 }
@@ -36,7 +34,7 @@ impl Transform {
     }
     pub fn from_rotation(rotation: Quat) -> Self {
         Self {
-            rotation :  Quat::from_rotation_x(PI/2.0)*rotation,
+            rotation: Quat::from_rotation_x(PI / 2.0) * rotation,
             ..Default::default()
         }
     }
@@ -51,6 +49,8 @@ impl Transform {
     pub fn matrix(&self) -> Mat4 {
         let position = self.position;
 
-        Mat4::from_translation(self.position) * Mat4::from_quat(self.rotation)
+        Mat4::from_translation(self.position)
+            * Mat4::from_quat(self.rotation)
+            * Mat4::from_scale(self.scale)
     }
 }

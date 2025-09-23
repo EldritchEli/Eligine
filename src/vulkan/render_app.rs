@@ -34,6 +34,8 @@ use crate::vulkan::uniform_buffer_object::UniformBufferObject;
 use glam::Mat4;
 use glam::Vec3;
 use std::ptr::copy_nonoverlapping as memcpy;
+use bevy::prelude::Quat;
+
 /// Our Vulkan app.
 #[derive(Clone, Debug)]
 pub struct App {
@@ -133,7 +135,7 @@ impl App {
         // create_texture_image_view(&device, &mut data)?;
         // create_texture_sampler(&device, &mut data)?;
         create_transient_command_pool(&instance, &device, &mut data)?;
-        create_descriptor_pool(&device, &mut data, 3)?;
+        create_descriptor_pool(&device, &mut data, 30)?;
         //   let mut object = match RenderObject::load_obj_format(
         //       &instance,
         //       &device,
@@ -148,7 +150,7 @@ impl App {
             &instance,
             &device,
             &mut data,
-            "living_room/Chair.glb".to_string(),
+            "city_building.glb".to_string(),
         ) {
             Ok(object) => object,
             Err(e) => panic!("you fucked up {:?}", e),
@@ -158,16 +160,18 @@ impl App {
             .into_iter()
             .map(|r| scene.render_objects.insert(r))
             .collect();
-        let render_key = render_object_keys[0];
-        for i in 0..3 {
-            for j in 0..3 {
+        for key in render_object_keys {
+
+
+          //  for j in 0..3 {
                 let mut transform =
-                    Transform::from_position(Vec3::new(1.0 + (i * 3) as f32, 0.0, (-j * 3) as f32));
-                transform.scale = 80.0 * transform.scale;
-                let Some(_instance) = scene.insert_from_transform(transform, render_key) else {
+                    Transform::from_position(Vec3::new(1.0 + ( 3) as f32, 0.0, ( 3) as f32));
+                transform.scale  = 0.01*transform.scale;
+                transform.rotation = glam::Quat::from_rotation_x(PI / 2.0)*transform.rotation;
+                let Some(_instance) = scene.insert_from_transform(transform, key) else {
                     return Err(anyhow!("some did gone goofed"));
                 };
-            }
+           // }
         }
 
         //create_vertex_buffer(&instance, &device, &mut data)?;
@@ -202,7 +206,7 @@ impl App {
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
         //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
-        create_descriptor_pool(&self.device, &mut self.data, 3)?;
+        create_descriptor_pool(&self.device, &mut self.data, 30)?;
         for (i, object) in self.scene.render_objects.iter_mut() {
             create_uniform_buffers(
                 &self.instance,

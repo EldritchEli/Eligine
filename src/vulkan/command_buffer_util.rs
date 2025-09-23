@@ -55,7 +55,7 @@ pub unsafe fn create_command_buffers(
             vk::PipelineBindPoint::GRAPHICS,
             data.pipeline,
         );
-        for (i, object) in &scene.render_objects {
+        for (j, object) in &scene.render_objects {
             device.cmd_bind_vertex_buffers(
                 *command_buffer,
                 0,

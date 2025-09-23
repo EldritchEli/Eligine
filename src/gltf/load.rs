@@ -14,19 +14,13 @@ use crate::{
 use bevy::render::alpha;
 use core::slice;
 use glam::{Vec2, Vec3, Vec4};
-use gltf::{
-    self,
-    buffer::{self, View},
-    image,
-    mesh::{util::indices, Mesh},
-    scene::Transform,
-    Accessor, Buffer, Gltf, Material, Node, Semantic,
-};
+use gltf::{self, buffer::{self, View}, image, mesh::{util::indices, Mesh}, scene::Transform, Accessor, Attribute, Buffer, Gltf, Material, Node, Semantic};
 use log::info;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
 };
+use gltf::json::accessor::{ComponentType, Type};
 use terrors::OneOf;
 use vulkanalia::{Device, Instance};
 
@@ -79,14 +73,18 @@ fn load_node(
             for attr in prim.attributes() {
                 let accessor = prim.get(&attr.0).unwrap();
                 let view = accessor.view().unwrap();
+                println!("attribute index {:?} has type: {:?}  with data type {:?} and dimensions {:?},\
+                with offset {:?}. Its data bufferview is {:?} with buffer offset {:?} and stride {:?}.",
+                         accessor.index(), attr.0, accessor.data_type(), accessor.dimensions(), accessor.offset(), view.index(), view.offset(), view.stride());
+                drop(view);
+                let slice = get_buffer_slice(&accessor, buffers);
 
-                let slice = get_buffer_slice(&view, buffers);
                 attr_map.insert(attr.0, slice);
             }
 
             let vertices = intersperse_vertex_data(&attr_map);
             let index_acc = prim.indices().unwrap();
-            let index_slice = get_buffer_slice(&index_acc.view().unwrap(), buffers);
+            let index_slice = get_buffer_slice(&index_acc, buffers);
             let indices: Vec<u32> = match index_acc.data_type() {
                 gltf::accessor::DataType::U8 => {
                     println!("index data type: u8");
@@ -176,14 +174,33 @@ fn load_node(
     Ok(render_objects)
 }
 
-fn get_buffer_slice<'a>(view: &View, buffers: &'a Vec<buffer::Data>) -> &'a [u8] {
+fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> &'a [u8] {
+    let view = accessor.view().unwrap();
     let index = view.buffer().index();
     info!(
         "buffer index : {index:?}, length : {:?}",
         view.buffer().length()
     );
+
     let buffer = &buffers[index];
-    &buffer.0[view.offset()..view.offset() + view.length()]
+    let type_size = match accessor.data_type() {
+        ComponentType::I8 => 1,
+        ComponentType::U8 => 1,
+        ComponentType::I16 => 2,
+        ComponentType::U16 => 2,
+        ComponentType::U32 => 4,
+        ComponentType::F32 => 4
+    };
+    let dimension = match accessor.dimensions() {
+        Type::Scalar => 1,
+        Type::Vec2 => 2,
+        Type::Vec3 => 3,
+        Type::Vec4 => 4,
+        Type::Mat2 => 4,
+        Type::Mat3 => 9,
+        Type::Mat4 => 16,
+    }  ;
+    &buffer.0[accessor.offset() + view.offset()..accessor.offset() + view.offset() + accessor.count()*type_size*dimension]
 }
 
 fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
@@ -208,8 +225,8 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
         coords.len() / 2 == positions.len() / 3,
         "attribute lists must be of the same length, 
         but is {} and {}",
-        coords.len(),
-        positions.len()
+        coords.len() / 2 ,
+        positions.len() / 3
     );
     let mut vertices = vec![];
 

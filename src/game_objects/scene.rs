@@ -1,12 +1,13 @@
 use crate::game_objects;
 use crate::game_objects::camera::Camera;
 use crate::vulkan::input_state::InputState;
+use crate::vulkan::renderer;
 use glam::Vec3;
 use slab::Slab;
 
 use std::f32::consts::PI;
 
-use crate::game_objects::render_object::RenderObject;
+use crate::game_objects::render_object::{ObjectId, RenderId, RenderObject};
 use crate::game_objects::transform::Transform;
 use terrors::OneOf;
 use tobj::Material;
@@ -14,8 +15,8 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 pub struct GameObject {
     pub transform: Transform,
-    pub children: Vec<GameObject>,
-    pub render_object: usize,
+    pub children: Vec<ObjectId>,
+    pub render_object: Option<RenderId>,
 }
 
 impl GameObject {}
@@ -34,33 +35,39 @@ impl Scene {
     pub fn insert_instance(
         &mut self,
         object: GameObject,
-        render_object_id: usize,
-    ) -> Option<usize> {
-        let render_object = self.render_objects.get_mut(render_object_id)?;
-        let instance_id = self.objects.insert(object);
-        render_object.instances.push(instance_id);
+        render_object_id: Option<RenderId>,
+    ) -> Option<ObjectId> {
+        let instance_id = ObjectId(self.objects.insert(object));
+        if render_object_id.is_some() {
+            let render_object = self.render_objects.get_mut(render_object_id.unwrap().0)?;
+            render_object.instances.push(instance_id.clone());
+        }
         Some(instance_id)
     }
 
     pub fn insert_from_transform(
         &mut self,
         transform: Transform,
-        render_object_id: usize,
-    ) -> Option<usize> {
+        render_object_id: RenderId,
+    ) -> Option<ObjectId> {
         self.insert_instance(
             GameObject {
                 transform,
                 children: vec![],
-                render_object: render_object_id,
+                render_object: Some(render_object_id.clone()),
             },
-            render_object_id,
+            Some(render_object_id),
         )
     }
-    pub fn remove_instance(&mut self, id: usize) -> Option<GameObject> {
-        let object = self.objects.remove(id);
-        let render = self.render_objects.get_mut(object.render_object)?;
-        let index = render.instances.iter().position(|i| *i == id).unwrap();
-        let _ind = render.instances.swap_remove(index);
+    pub fn remove_instance(&mut self, id: ObjectId) -> Option<GameObject> {
+        let object = self.objects.remove(id.0);
+        if object.render_object.is_some() {
+            let render = self
+                .render_objects
+                .get_mut(object.render_object.clone().unwrap().0)?;
+            let index = render.instances.iter().position(|i| i.0 == id.0).unwrap();
+            let _ind = render.instances.swap_remove(index);
+        }
         Some(object)
     }
 }

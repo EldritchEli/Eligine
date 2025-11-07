@@ -55,7 +55,7 @@ pub unsafe fn create_command_buffers(
             vk::PipelineBindPoint::GRAPHICS,
             data.pipeline,
         );
-        for (j, object) in &scene.render_objects {
+        for (_, object) in &scene.render_objects {
             device.cmd_bind_vertex_buffers(
                 *command_buffer,
                 0,
@@ -76,6 +76,16 @@ pub unsafe fn create_command_buffers(
                 0,
                 &[object.descriptor_sets[i]],
                 &[],
+            );
+
+            let f32_push_data = (scene.camera.transform.matrix().inverse()).to_cols_array();
+            let push_data: [u8; 64] = std::mem::transmute(f32_push_data);
+            device.cmd_push_constants(
+                *command_buffer,
+                data.pipeline_layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                &push_data,
             );
 
             device.cmd_draw_indexed(

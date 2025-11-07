@@ -26,7 +26,9 @@ pub enum Colors {
 }
 
 pub enum Attribute {
-    Vertex, Normal,TexCoord
+    Vertex,
+    Normal,
+    TexCoord,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -135,7 +137,6 @@ impl VertexData {
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
-        
 
         copy_buffer(device, data, staging_buffer, index_buffer, size)?;
 

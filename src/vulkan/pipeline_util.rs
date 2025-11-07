@@ -1,9 +1,9 @@
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::shader_module_util::create_shader_module;
+use crate::vulkan::uniform_buffer_object::PushConstants;
 use crate::vulkan::vertexbuffer_util::Vertex;
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
 use vulkanalia::{vk, Device};
-
 pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
     let vert = include_bytes!("../shaders/vert.spv");
     let frag = include_bytes!("../shaders/frag.spv");
@@ -15,7 +15,11 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> anyhow::Re
         .stage(vk::ShaderStageFlags::VERTEX)
         .module(vert_shader_module)
         .name(b"main\0");
-
+    let push_range = vk::PushConstantRange::builder()
+        .offset(0)
+        .size(size_of::<PushConstants>() as u32)
+        .stage_flags(vk::ShaderStageFlags::VERTEX)
+        .build();
     //specialization_info for shader constants!!
     let frag_stage = vk::PipelineShaderStageCreateInfo::builder()
         .stage(vk::ShaderStageFlags::FRAGMENT)
@@ -100,7 +104,11 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> anyhow::Re
         vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(dynamic_states);
 
     let set_layouts = &[data.descriptor_set_layout];
-    let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
+    let push_ranges = [push_range];
+    let mut layout_info = vk::PipelineLayoutCreateInfo::builder()
+        .set_layouts(set_layouts)
+        .push_constant_ranges(&push_ranges);
+    layout_info.push_constant_range_count = 1;
     data.pipeline_layout = device.create_pipeline_layout(&layout_info, None)?;
 
     let stages = &[vert_stage, frag_stage];

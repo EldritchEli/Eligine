@@ -14,34 +14,32 @@ use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_vie
 use crate::vulkan::sync_util::create_sync_objects;
 use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
-use bevy::render::Render;
 use std::f32::consts::PI;
+use std::path::Path;
 use std::time::Instant;
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::vk::{
     DeviceV1_0, ExtDebugUtilsExtension, Handle, HasBuilder, InstanceV1_0, KhrSurfaceExtension,
-    KhrSwapchainExtension, ObjectType,
+    KhrSwapchainExtension,
 };
 use vulkanalia::window as vk_window;
 use vulkanalia::{vk, Device, Entry, Instance};
 use winit::window::Window;
 
-use crate::game_objects::render_object::RenderObject;
+use crate::game_objects::render_object::{ObjectId, RenderId};
 use crate::game_objects::scene::Scene;
-use crate::game_objects::transform::Transform;
 use crate::vulkan::color_objects::create_color_objects;
 use crate::vulkan::uniform_buffer_object::UniformBufferObject;
 use glam::Mat4;
-use glam::Vec3;
 use std::ptr::copy_nonoverlapping as memcpy;
-use bevy::prelude::Quat;
 
 /// Our Vulkan app.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct App {
     pub entry: Entry,
     pub instance: Instance,
     pub data: AppData,
+    pub window: Window,
     pub scene: Scene,
     pub device: Device,
     pub frame: usize,
@@ -104,19 +102,19 @@ pub struct AppData {
 }
 impl App {
     /// Creates our Vulkan app.
-    pub(crate) unsafe fn create(window: &Window) -> anyhow::Result<Self> {
+    pub(crate) unsafe fn create(window: Window) -> anyhow::Result<Self> {
         let resized = false;
         let loader = LibloadingLoader::new(LIBRARY)?;
         let mut scene = Scene::default();
         let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
         let mut data = AppData::default();
-        let instance = create_instance(window, &entry, &mut data)?;
+        let instance = create_instance(&window, &entry, &mut data)?;
         data.surface = vk_window::create_surface(&instance, &window, &window)?;
         pick_physical_device(&instance, &mut data)?;
         let device = create_logical_device(&entry, &instance, &mut data)?;
         let start = Instant::now();
 
-        create_swapchain(window, &instance, &device, &mut data)?;
+        create_swapchain(&window, &instance, &device, &mut data)?;
         create_swapchain_image_views(&device, &mut data)?;
         create_render_pass(&instance, &device, &mut data)?;
         create_descriptor_set_layout(&device, &mut data)?;
@@ -146,7 +144,16 @@ impl App {
         //       Ok(object) => object,
         //       Err(e) => anyhow::bail!("{}", e),
         //   };
-        let mut objects = match gltf::load::scene(
+
+        //create_vertex_buffer(&instance, &device, &mut data)?;
+        //create_index_buffer(&instance, &device, &mut data)?;
+        //create_uniform_buffers(&instance, &device, &mut data)?;
+        //create_descriptor_sets(&device, &mut data)?;
+
+        create_command_buffers(&device, &mut scene, &mut data)?;
+        create_sync_objects(&device, &mut data)?;
+
+        /*let mut objects = match gltf::load::scene(
             &instance,
             &device,
             &mut data,
@@ -161,28 +168,24 @@ impl App {
             .map(|r| scene.render_objects.insert(r))
             .collect();
         for key in render_object_keys {
+            //  for j in 0..3 {
+            let mut transform =
+                Transform::from_position(Vec3::new(1.0 + (3) as f32, 0.0, (3) as f32));
+            transform.scale = 0.01 * transform.scale;
+            transform.rotation = glam::Quat::from_rotation_x(PI / 2.0) * transform.rotation;
+            let Some(_instance) = scene.insert_from_transform(transform, key) else {
+                return Err(anyhow!("some did gone goofed"));
+            };
+            // }
+        }*/
 
-
-          //  for j in 0..3 {
-                let mut transform =
-                    Transform::from_position(Vec3::new(1.0 + ( 3) as f32, 0.0, ( 3) as f32));
-                transform.scale  = 0.01*transform.scale;
-                transform.rotation = glam::Quat::from_rotation_x(PI / 2.0)*transform.rotation;
-                let Some(_instance) = scene.insert_from_transform(transform, key) else {
-                    return Err(anyhow!("some did gone goofed"));
-                };
-           // }
-        }
-
-        //create_vertex_buffer(&instance, &device, &mut data)?;
-        //create_index_buffer(&instance, &device, &mut data)?;
-        //create_uniform_buffers(&instance, &device, &mut data)?;
-        //create_descriptor_sets(&device, &mut data)?;
-
-        create_command_buffers(&device, &mut scene, &mut data)?;
-        create_sync_objects(&device, &mut data)?;
-
-        Ok(Self {
+        let paths = [
+            "assets/city_building.glb",
+            "assets/bird_orange.glb",
+            "assets/living_room/Rubiks Cube.glb",
+            //"assets/Platformer/Character/glTF/Character.gltf",
+        ];
+        let mut app = Self {
             entry,
             instance,
             data,
@@ -191,14 +194,52 @@ impl App {
             frame: 0,
             resized,
             start,
-        })
+            window,
+        };
+        let (_object_keys, _render_keys) = app.add_render_objects(&paths, true);
+        Ok(app)
     }
 
-    unsafe fn recreate_swapchain(&mut self, window: &Window) -> anyhow::Result<()> {
+    pub fn add_render_object(
+        &mut self,
+        path: impl AsRef<Path>,
+        default_instance: bool,
+    ) -> Result<(Vec<ObjectId>, Vec<RenderId>), ()> {
+        let (object_id, render_object) = match gltf::load::scene(
+            &self.instance,
+            &self.device,
+            &mut self.data,
+            &mut &mut self.scene,
+            default_instance,
+            path.as_ref(),
+        ) {
+            Ok(object) => object,
+            Err(e) => panic!("you fucked up {:?}", e),
+        };
+        Ok((object_id.unwrap_or_default(), render_object))
+    }
+
+    pub fn add_render_objects(
+        &mut self,
+        paths: &[&str],
+        default_instance: bool,
+    ) -> (Vec<ObjectId>, Vec<RenderId>) {
+        let mut game_object_ids = vec![];
+        let mut render_object_ids = vec![];
+        for path in paths {
+            if let Ok((gs, rs)) = self.add_render_object(path, default_instance) {
+                gs.into_iter().for_each(|g| game_object_ids.push(g));
+                rs.into_iter().for_each(|r| render_object_ids.push(r));
+            }
+        }
+        (game_object_ids, render_object_ids)
+    }
+
+    unsafe fn recreate_swapchain(&mut self) -> anyhow::Result<()> {
         println!("recreate_swapchain");
         self.device.device_wait_idle()?;
         self.destroy_swapchain();
-        create_swapchain(window, &self.instance, &self.device, &mut self.data)?;
+        create_swapchain(&self.window, &self.instance, &self.device, &mut self.data)?;
         create_swapchain_image_views(&self.device, &mut self.data)?;
         create_render_pass(&self.instance, &self.device, &mut self.data)?;
         create_pipeline(&self.device, &mut self.data)?;
@@ -256,7 +297,7 @@ impl App {
         for (i, object) in self.scene.render_objects.iter() {
             let mut model = [Mat4::default(); 10];
             for (index, instance_index) in object.instances.iter().enumerate() {
-                let instance = self.scene.objects.get(*instance_index).unwrap();
+                let instance = self.scene.objects.get(instance_index.0).unwrap();
                 model[index] = instance.transform.matrix();
             }
             let ubo = UniformBufferObject {
@@ -281,7 +322,8 @@ impl App {
     }
 
     /// Renders a frame for our Vulkan app.
-    pub(crate) unsafe fn render(&mut self, window: &Window) -> anyhow::Result<()> {
+    pub(crate) unsafe fn render(&mut self) -> anyhow::Result<()> {
+        println!("rendering frame");
         self.device
             .wait_for_fences(&[self.data.in_flight_fences[self.frame]], true, u64::MAX)?;
 
@@ -293,9 +335,9 @@ impl App {
         );
 
         let image_index = match result {
-            Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => return self.recreate_swapchain(window),
+            Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => return self.recreate_swapchain(),
             Ok((image_index, _)) => image_index as usize,
-            Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(window),
+            Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(),
             Err(e) => return Err(anyhow!(e)),
         };
 
@@ -343,7 +385,7 @@ impl App {
 
         if self.resized || changed {
             self.resized = false;
-            self.recreate_swapchain(window)?;
+            self.recreate_swapchain()?;
         } else if let Err(e) = result {
             return Err(anyhow!(e));
         }

@@ -3,7 +3,7 @@ use crate::vulkan::descriptor_util::{create_descriptor_sets, create_uniform_buff
 use crate::vulkan::image_util::TextureData;
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexData};
-use glam::{vec2, vec3, Vec2, Vec3};
+use glam::{vec2, vec3};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
@@ -11,23 +11,23 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use terrors::OneOf;
 use tobj::LoadError;
-use uuid::Uuid;
 
 use vulkanalia::vk::{Buffer, DescriptorSet, DeviceMemory};
 use vulkanalia::{Device, Instance};
 
 #[derive(Clone, Debug)]
-pub struct node {
-    pub render_object: Option<RenderObject>,
-}
+pub struct RenderId(pub usize);
 #[derive(Clone, Debug)]
+pub struct ObjectId(pub usize);
+#[derive(Clone, Debug)]
+
 pub struct RenderObject {
     pub vertex_data: VertexData,
     pub texture_data: TextureData,
     pub uniform_buffers: Vec<Buffer>,
     pub uniform_buffers_memory: Vec<DeviceMemory>,
     pub descriptor_sets: Vec<DescriptorSet>,
-    pub instances: Vec<usize>,
+    pub instances: Vec<ObjectId>,
 }
 
 impl RenderObject {

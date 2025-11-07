@@ -1,26 +1,25 @@
 use crate::{
     game_objects::{
-        render_object::{self, RenderObject},
-        transform::{self},
+        render_object::{ObjectId, RenderId, RenderObject},
+        scene::{GameObject, Scene},
+        transform::Transform,
     },
     vulkan::{
         image_util::TextureData,
         render_app::AppData,
         vertexbuffer_util::{Vertex, VertexData},
     },
-    ASSETS,
 };
 
-use bevy::render::alpha;
-use core::slice;
-use glam::{Vec2, Vec3, Vec4};
-use gltf::{self, buffer::{self, View}, image, mesh::{util::indices, Mesh}, scene::Transform, Accessor, Attribute, Buffer, Gltf, Material, Node, Semantic};
-use log::info;
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-};
+use glam::{Vec2, Vec3};
 use gltf::json::accessor::{ComponentType, Type};
+use gltf::{
+    self,
+    buffer::{self},
+    image, Accessor, Node, Semantic,
+};
+use log::info;
+use std::{collections::HashMap, f32::consts::PI, path::Path};
 use terrors::OneOf;
 use vulkanalia::{Device, Instance};
 
@@ -29,37 +28,55 @@ pub fn scene(
     instance: &Instance,
     device: &Device,
     data: &mut AppData,
-    path: String,
-) -> Result<Vec<RenderObject>, OneOf<(gltf::Error, String, anyhow::Error)>> {
-    println!("pathbuf: {path:?}");
-    let gltf = Gltf::open(format!("assets/{path}")).map_err(|e| OneOf::new(e))?;
-    let (document, buffers, images) =
-        gltf::import(format!("assets/{path}")).map_err(|e| OneOf::new(e))?;
+    scene: &mut Scene,
+    default_instance: bool,
+    path: impl AsRef<Path>,
+) -> Result<(Option<Vec<ObjectId>>, Vec<RenderId>), OneOf<(gltf::Error, String, anyhow::Error)>> {
+    println!("pathbuf: {:?}", path.as_ref());
+    let (document, buffers, images) = gltf::import(path).map_err(|e| OneOf::new(e))?;
 
-    //let data = GltfData { nodes, meshes, accessors, buffers, views, materials };
-    let mut render_objects: Vec<RenderObject> = vec![];
-    for scene in document.scenes() {
-        for node in scene.nodes() {
-            load_node(instance, device, data, &node, &buffers, &images, None)?
-                .into_iter()
-                .for_each(|r| render_objects.push(r));
+    let mut render_objects: Vec<RenderId> = vec![];
+    let mut game_objects: Vec<ObjectId> = vec![];
+    for gltf_scene in document.scenes() {
+        for node in gltf_scene.nodes() {
+            let (object_id, render_ids) = load_node(
+                instance,
+                device,
+                data,
+                scene,
+                &node,
+                default_instance,
+                &buffers,
+                &images,
+                None,
+            )?;
+            render_ids.into_iter().for_each(|r| render_objects.push(r));
+            if default_instance {
+                game_objects.push(object_id.unwrap())
+            }
         }
     }
-    Ok(render_objects)
+    if default_instance {
+        Ok((Some(game_objects), render_objects))
+    } else {
+        Ok((None, render_objects))
+    }
 }
 
 fn load_node(
     instance: &Instance,
     device: &Device,
     data: &mut AppData,
+    scene: &mut Scene,
     node: &Node,
+    default_instance: bool,
     buffers: &Vec<buffer::Data>,
     images: &Vec<image::Data>,
-    parent_transform: Option<&Transform>,
-) -> Result<Vec<RenderObject>, OneOf<(gltf::Error, String, anyhow::Error)>> {
-    let transform = node.transform();
-
-    let mut render_objects = vec![];
+    parent_transform: Option<&glam::Mat4>,
+) -> Result<(Option<ObjectId>, Vec<RenderId>), OneOf<(gltf::Error, String, anyhow::Error)>> {
+    let mut render_object_ids: Vec<RenderId> = vec![];
+    let mut maybe_render_id: Option<RenderId> = None;
+    let mut maybe_object_id: Option<ObjectId> = None;
 
     info!("loading node {}", node.index());
     if let Some(mesh) = node.mesh() {
@@ -154,24 +171,53 @@ fn load_node(
                 )
             }
             .map_err(OneOf::broaden)?;
-            render_objects.push(render_object);
+            let render_key = RenderId(scene.render_objects.insert(render_object));
+            maybe_render_id = Some(render_key.clone());
+            render_object_ids.push(render_key);
         }
     }
+    let mut transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
 
+    if let Some(parent_transform) = parent_transform {
+        transform = parent_transform * transform;
+    }
+    let mut children = vec![];
     for child in node.children() {
-        load_node(
+        let (object_id, render_ids) = load_node(
             instance,
             device,
             data,
+            scene,
             &child,
+            default_instance,
             buffers,
             images,
             Some(&transform),
-        )?
-        .into_iter()
-        .for_each(|r| render_objects.push(r));
+        )?;
+        render_ids
+            .into_iter()
+            .for_each(|r| render_object_ids.push(r));
+        if let Some(id) = object_id {
+            children.push(id);
+        }
     }
-    Ok(render_objects)
+
+    if default_instance {
+        transform = glam::Mat4::from_rotation_x(PI) * transform;
+        let (scale, rotation, position) = transform.to_scale_rotation_translation();
+        let transform = Transform {
+            position,
+            scale,
+            rotation,
+        };
+        let game_object = GameObject {
+            transform,
+            children,
+            render_object: maybe_render_id.clone(),
+        };
+        maybe_object_id = scene.insert_instance(game_object, maybe_render_id.clone());
+    }
+    Ok((maybe_object_id, render_object_ids))
 }
 
 fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> &'a [u8] {
@@ -189,7 +235,7 @@ fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> 
         ComponentType::I16 => 2,
         ComponentType::U16 => 2,
         ComponentType::U32 => 4,
-        ComponentType::F32 => 4
+        ComponentType::F32 => 4,
     };
     let dimension = match accessor.dimensions() {
         Type::Scalar => 1,
@@ -199,8 +245,9 @@ fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> 
         Type::Mat2 => 4,
         Type::Mat3 => 9,
         Type::Mat4 => 16,
-    }  ;
-    &buffer.0[accessor.offset() + view.offset()..accessor.offset() + view.offset() + accessor.count()*type_size*dimension]
+    };
+    &buffer.0[accessor.offset() + view.offset()
+        ..accessor.offset() + view.offset() + accessor.count() * type_size * dimension]
 }
 
 fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
@@ -214,18 +261,15 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
     let positions: &[Vec3] = unsafe { std::mem::transmute(positions) };
 
     println!("positions: {:?}", positions.len() / 12);
-    //let positions = positions.to_vec();
-    //println!("positions: {:?}", positions.len());
     assert!(coords.len() % 8 == 0, "coords must be divisible by 8");
     let coords: &[Vec2] = unsafe { std::mem::transmute(coords) };
     println!("coords: {:?}", coords.len() / 8);
-    //let coords = coords.to_vec();
-    //println!("coords: {:?}", coords.len());
+
     assert!(
         coords.len() / 2 == positions.len() / 3,
         "attribute lists must be of the same length, 
         but is {} and {}",
-        coords.len() / 2 ,
+        coords.len() / 2,
         positions.len() / 3
     );
     let mut vertices = vec![];
@@ -242,7 +286,7 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
     println!("vertex count : {:?}", vertices.len());
     vertices
 }
-/// turns images with type rgb to rgba.
+/// turns images with type r8g8b8 to r8g8b8a8.
 fn interleave_alpha_channel(rgbs: &Vec<u8>, alpha_val: u8) -> Vec<u8> {
     let a = alpha_val;
     let mut rgbas: Vec<u8> = Vec::with_capacity(rgbs.len() * (1 / 3));

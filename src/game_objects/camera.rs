@@ -53,7 +53,7 @@ impl Camera {
     }
 
     pub fn update(&mut self, delta_time: f32, input: &InputState) {
-        let mouse_delta = input.mouse_delta;
+        let mouse_delta = 100.0 * delta_time * input.mouse_delta;
 
         if input.key_w.is_down() {
             self.move_forward(delta_time);
@@ -82,7 +82,6 @@ impl Camera {
 }
 impl Default for Camera {
     fn default() -> Self {
-        let pos = Vec3::new(0.0, 2.0, 0.0);
         Self::new(Vec3::ZERO, Vec3::Z, 1.0, 0.20, 1.0, 45.0)
     }
 }

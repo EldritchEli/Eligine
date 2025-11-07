@@ -1,8 +1,6 @@
 use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
-use nalgebra_glm::{vec2, I8Vec2, Vec2};
-use winit::event::DeviceEvent::MouseMotion;
-use winit::event::WindowEvent::KeyboardInput;
-use winit::event::{ElementState, Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
+use glam::{vec2, I8Vec2, Vec2};
+use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -81,9 +79,8 @@ impl InputState {
     pub(crate) fn new() -> Self {
         Self::default()
     }
-    pub fn set_mouse_delta(&mut self, p0: (f64, f64)) -> () {
-        let (f1, f2) = p0;
-        self.mouse_delta = vec2(f1 as f32, f2 as f32);
+    pub fn set_mouse_delta(&mut self, x: f64, y: f64) -> () {
+        self.mouse_delta = vec2(x as f32, x as f32);
     }
     fn set_mouse_position(&mut self, p: (f64, f64)) -> () {
         let (f1, f2) = p;
@@ -93,8 +90,8 @@ impl InputState {
         ();
     }
 
-    pub fn read_event(&mut self, event: &winit::event::Event<()>) -> Option<()> {
-        if let Event::DeviceEvent {
+    pub fn read_event(&mut self, event: &WindowEvent) -> Option<()> {
+        /*  if let Event::DeviceEvent {
             event: MouseMotion { delta, .. },
             ..
         } = event
@@ -103,35 +100,30 @@ impl InputState {
             self.set_mouse_delta(*delta)
         } else {
             self.set_mouse_delta((0.0, 0.0))
-        }
+        }*/
         match event {
-            Event::WindowEvent {
-                event: WindowEvent::CursorMoved { position, .. },
-                ..
-            } => {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_delta = vec2(
+                    position.x as f32 - self.mouse_position.x,
+                    position.y as f32 - self.mouse_position.y,
+                );
                 self.set_mouse_position((position.x, position.y));
                 //println!("Cursor moved {:?} ", position);
                 Some(())
             }
 
-            Event::WindowEvent {
-                event: WindowEvent::MouseWheel { delta, .. },
-                ..
-            } => match delta {
+            WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_x, _y) => {
                     // println!("mouse wheel deltaxy: {}{}", x,y);
                     Some(())
                 }
                 _ => Some(()),
             },
-            Event::WindowEvent {
-                event:
-                    WindowEvent::MouseInput {
-                        device_id,
-                        state,
-                        button,
-                    },
-                ..
+
+            WindowEvent::MouseInput {
+                device_id: _,
+                state,
+                button,
             } => {
                 match button {
                     MouseButton::Left => {
@@ -149,15 +141,12 @@ impl InputState {
                 }
                 Some(())
             }
-            Event::WindowEvent {
+
+            WindowEvent::KeyboardInput {
                 event:
-                    KeyboardInput {
-                        event:
-                            KeyEvent {
-                                state,
-                                physical_key,
-                                ..
-                            },
+                    KeyEvent {
+                        state,
+                        physical_key,
                         ..
                     },
                 ..

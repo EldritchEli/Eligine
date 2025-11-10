@@ -22,7 +22,7 @@ impl Camera {
     ) -> Self {
         let transform = Transform {
             position,
-            rotation: Quat::look_at_rh(position, look_at, Vec3::Y),
+            rotation: Quat::look_at_rh(position, look_at, -Vec3::Y),
             ..Default::default()
         };
         Self {
@@ -53,6 +53,7 @@ impl Camera {
     }
 
     pub fn update(&mut self, delta_time: f32, input: &InputState) {
+        //println!("camera position: {:?}", self.transform.position);
         let mouse_delta = 100.0 * delta_time * input.mouse_delta;
 
         if input.key_w.is_down() {

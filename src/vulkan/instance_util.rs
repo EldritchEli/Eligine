@@ -1,3 +1,4 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::{PORTABILITY_MACOS_VERSION, VALIDATION_ENABLED, VALIDATION_LAYER};
 use anyhow::anyhow;
@@ -7,7 +8,7 @@ use std::ffi::CStr;
 use std::os::raw::c_void;
 use vulkanalia::vk::{EntryV1_0, HasBuilder};
 use vulkanalia::window as vk_window;
-use vulkanalia::{vk, Entry, Instance};
+use vulkanalia::{Entry, Instance, vk};
 use winit::window::Window;
 //Debug callback function extern keyword so that vulkan can call our rust function
 extern "system" fn debug_callback(

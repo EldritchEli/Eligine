@@ -1,10 +1,11 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::game_objects::render_object::RenderObject;
 use crate::vulkan::buffer_util::create_buffer;
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::uniform_buffer_object::UniformBufferObject;
 use anyhow::Result;
 use vulkanalia::vk::{DeviceMemory, DeviceV1_0, HasBuilder};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 
 pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
     let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
@@ -103,8 +104,8 @@ pub unsafe fn create_descriptor_sets(
             .buffer_info(buffer_info);
         let info = vk::DescriptorImageInfo::builder()
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(object.texture_data.image_view)
-            .sampler(object.texture_data.sampler);
+            .image_view(object.pbr.texture_data.image_view)
+            .sampler(object.pbr.texture_data.sampler);
 
         let image_info = &[info];
         let sampler_write = vk::WriteDescriptorSet::builder()

@@ -1,3 +1,4 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::gltf;
 use crate::vulkan::command_buffer_util::create_command_buffers;
 use crate::vulkan::command_pool::{create_command_pool, create_transient_command_pool};
@@ -17,20 +18,20 @@ use anyhow::anyhow;
 use std::f32::consts::PI;
 use std::path::Path;
 use std::time::Instant;
-use vulkanalia::loader::{LibloadingLoader, LIBRARY};
+use vulkanalia::loader::{LIBRARY, LibloadingLoader};
 use vulkanalia::vk::{
     DeviceV1_0, ExtDebugUtilsExtension, Handle, HasBuilder, InstanceV1_0, KhrSurfaceExtension,
     KhrSwapchainExtension,
 };
 use vulkanalia::window as vk_window;
-use vulkanalia::{vk, Device, Entry, Instance};
+use vulkanalia::{Device, Entry, Instance, vk};
 use winit::window::Window;
 
 use crate::game_objects::render_object::{ObjectId, RenderId};
 use crate::game_objects::scene::Scene;
 use crate::vulkan::color_objects::create_color_objects;
 use crate::vulkan::uniform_buffer_object::UniformBufferObject;
-use glam::Mat4;
+use glam::{Mat4, Vec4};
 use std::ptr::copy_nonoverlapping as memcpy;
 
 /// Our Vulkan app.
@@ -81,12 +82,6 @@ pub struct AppData {
     pub in_flight_fences: Vec<vk::Fence>,
     pub images_in_flight: Vec<vk::Fence>,
 
-    //pub vertex_buffer: vk::Buffer,
-    //pub vertex_buffer_memory: vk::DeviceMemory,
-    // pub index_buffer: vk::Buffer,
-    // pub index_buffer_memory: vk::DeviceMemory,
-    //pub uniform_buffers: Vec<vk::Buffer>,
-    //pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub descriptor_pool: vk::DescriptorPool,
 
     pub depth_image: vk::Image,
@@ -96,9 +91,6 @@ pub struct AppData {
     pub(crate) color_image: vk::Image,
     pub(crate) color_image_memory: vk::DeviceMemory,
     pub(crate) color_image_view: vk::ImageView,
-    //pub descriptor_sets: Vec<vk::DescriptorSet>,
-    // pub vertex_buffer: vk::Buffer,
-    // pub vertex_buffer_memory: vk::DeviceMemory,
 }
 impl App {
     /// Creates our Vulkan app.
@@ -124,68 +116,12 @@ impl App {
         create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
         create_framebuffers(&device, &mut data)?;
-        // create_texture_image(
-        //     &instance,
-        //     &device,
-        //     &mut data,
-        //     "src/resources/viking_room.png".parse()?,
-        // )?;
-        // create_texture_image_view(&device, &mut data)?;
-        // create_texture_sampler(&device, &mut data)?;
         create_transient_command_pool(&instance, &device, &mut data)?;
         create_descriptor_pool(&device, &mut data, 30)?;
-        //   let mut object = match RenderObject::load_obj_format(
-        //       &instance,
-        //       &device,
-        //       &mut data,
-        //       "src/resources/viking_room.obj".parse()?,
-        //       "src/resources/viking_room.png".parse()?,
-        //   ) {
-        //       Ok(object) => object,
-        //       Err(e) => anyhow::bail!("{}", e),
-        //   };
-
-        //create_vertex_buffer(&instance, &device, &mut data)?;
-        //create_index_buffer(&instance, &device, &mut data)?;
-        //create_uniform_buffers(&instance, &device, &mut data)?;
-        //create_descriptor_sets(&device, &mut data)?;
-
         create_command_buffers(&device, &mut scene, &mut data)?;
         create_sync_objects(&device, &mut data)?;
 
-        /*let mut objects = match gltf::load::scene(
-            &instance,
-            &device,
-            &mut data,
-            "city_building.glb".to_string(),
-        ) {
-            Ok(object) => object,
-            Err(e) => panic!("you fucked up {:?}", e),
-        };
-        println!("render objects: {:?}", objects.len());
-        let render_object_keys: Vec<usize> = objects
-            .into_iter()
-            .map(|r| scene.render_objects.insert(r))
-            .collect();
-        for key in render_object_keys {
-            //  for j in 0..3 {
-            let mut transform =
-                Transform::from_position(Vec3::new(1.0 + (3) as f32, 0.0, (3) as f32));
-            transform.scale = 0.01 * transform.scale;
-            transform.rotation = glam::Quat::from_rotation_x(PI / 2.0) * transform.rotation;
-            let Some(_instance) = scene.insert_from_transform(transform, key) else {
-                return Err(anyhow!("some did gone goofed"));
-            };
-            // }
-        }*/
-
-        let paths = [
-            "assets/city_building.glb",
-            "assets/bird_orange.glb",
-            "assets/living_room/Rubiks Cube.glb",
-            //"assets/Platformer/Character/glTF/Character.gltf",
-        ];
-        let mut app = Self {
+        let app = Self {
             entry,
             instance,
             data,
@@ -196,43 +132,31 @@ impl App {
             start,
             window,
         };
-        let (_object_keys, _render_keys) = app.add_render_objects(&paths, true);
         Ok(app)
     }
 
-    pub fn add_render_object(
-        &mut self,
-        path: impl AsRef<Path>,
-        default_instance: bool,
-    ) -> Result<(Vec<ObjectId>, Vec<RenderId>), ()> {
-        let (object_id, render_object) = match gltf::load::scene(
+    pub fn add_object(&mut self, path: impl AsRef<Path>) -> Result<Vec<ObjectId>, ()> {
+        let object_id = match gltf::load::scene(
             &self.instance,
             &self.device,
             &mut self.data,
             &mut &mut self.scene,
-            default_instance,
             path.as_ref(),
         ) {
             Ok(object) => object,
             Err(e) => panic!("you fucked up {:?}", e),
         };
-        Ok((object_id.unwrap_or_default(), render_object))
+        Ok(object_id)
     }
 
-    pub fn add_render_objects(
-        &mut self,
-        paths: &[&str],
-        default_instance: bool,
-    ) -> (Vec<ObjectId>, Vec<RenderId>) {
+    pub fn add_objects(&mut self, paths: &[&str]) -> Vec<ObjectId> {
         let mut game_object_ids = vec![];
-        let mut render_object_ids = vec![];
         for path in paths {
-            if let Ok((gs, rs)) = self.add_render_object(path, default_instance) {
+            if let Ok(gs) = self.add_object(path) {
                 gs.into_iter().for_each(|g| game_object_ids.push(g));
-                rs.into_iter().for_each(|r| render_object_ids.push(r));
             }
         }
-        (game_object_ids, render_object_ids)
+        game_object_ids
     }
 
     unsafe fn recreate_swapchain(&mut self) -> anyhow::Result<()> {
@@ -248,7 +172,7 @@ impl App {
         create_framebuffers(&self.device, &mut self.data)?;
         //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data, 30)?;
-        for (i, object) in self.scene.render_objects.iter_mut() {
+        for (_, object) in self.scene.render_objects.iter_mut() {
             create_uniform_buffers(
                 &self.instance,
                 &self.device,
@@ -294,24 +218,27 @@ impl App {
         let proj = correction * perspective;
 
         //let model_rotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time);
-        for (i, object) in self.scene.render_objects.iter() {
+        for (_i, object) in self.scene.render_objects.iter() {
             let mut model = [Mat4::default(); 10];
             for (index, instance_index) in object.instances.iter().enumerate() {
-                let instance = self.scene.objects.get(instance_index.0).unwrap();
-                model[index] = instance.transform.matrix();
+                let instance = self.scene.objects.get(*instance_index).unwrap();
+                model[index] = instance.global_matrix(&self.scene);
             }
             let ubo = UniformBufferObject {
                 view,
                 proj,
                 inv_view,
                 model,
+                base: object.pbr.base,
             };
-            let memory = self.device.map_memory(
-                object.uniform_buffers_memory[image_index],
-                0,
-                size_of::<UniformBufferObject>() as u64,
-                vk::MemoryMapFlags::empty(),
-            )?;
+            let memory = unsafe {
+                self.device.map_memory(
+                    object.uniform_buffers_memory[image_index],
+                    0,
+                    size_of::<UniformBufferObject>() as u64,
+                    vk::MemoryMapFlags::empty(),
+                )
+            }?;
 
             memcpy(&ubo, memory.cast(), 1);
 
@@ -322,8 +249,7 @@ impl App {
     }
 
     /// Renders a frame for our Vulkan app.
-    pub(crate) unsafe fn render(&mut self) -> anyhow::Result<()> {
-        println!("rendering frame");
+    pub unsafe fn render(&mut self) -> anyhow::Result<()> {
         self.device
             .wait_for_fences(&[self.data.in_flight_fences[self.frame]], true, u64::MAX)?;
 
@@ -399,15 +325,16 @@ impl App {
     pub(crate) unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
-        for (i, object) in &self.scene.render_objects {
+        for (_i, object) in self.scene.render_objects.iter() {
             self.device
-                .destroy_sampler(object.texture_data.sampler, None);
+                .destroy_sampler(object.pbr.texture_data.sampler, None);
             self.device
-                .destroy_image_view(object.texture_data.image_view, None);
+                .destroy_image_view(object.pbr.texture_data.image_view, None);
 
-            self.device.destroy_image(object.texture_data.image, None);
             self.device
-                .free_memory(object.texture_data.image_memory, None);
+                .destroy_image(object.pbr.texture_data.image, None);
+            self.device
+                .free_memory(object.pbr.texture_data.image_memory, None);
         }
 
         self.device
@@ -425,7 +352,7 @@ impl App {
             .image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        for (i, object) in &self.scene.render_objects {
+        for (i, object) in self.scene.render_objects.iter() {
             self.device
                 .free_memory(object.vertex_data.vertex_buffer_memory, None);
             self.device
@@ -462,7 +389,7 @@ impl App {
         self.device.destroy_image(self.data.depth_image, None);
         self.device
             .destroy_descriptor_pool(self.data.descriptor_pool, None);
-        self.scene.render_objects.iter().for_each(|(i, object)| {
+        self.scene.render_objects.iter().for_each(|(_i, object)| {
             object
                 .uniform_buffers
                 .iter()

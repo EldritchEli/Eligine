@@ -1,7 +1,8 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::game_objects::scene::Scene;
 use crate::vulkan::render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
-use vulkanalia::{vk, Device};
+use vulkanalia::{Device, vk};
 
 pub unsafe fn create_command_buffers(
     device: &Device,
@@ -55,7 +56,7 @@ pub unsafe fn create_command_buffers(
             vk::PipelineBindPoint::GRAPHICS,
             data.pipeline,
         );
-        for (_, object) in &scene.render_objects {
+        for (_, object) in scene.render_objects.iter() {
             device.cmd_bind_vertex_buffers(
                 *command_buffer,
                 0,

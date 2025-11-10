@@ -1,6 +1,9 @@
-use vulkanalia::{vk, Device};
+#![allow(unsafe_op_in_unsafe_fn)]
 use vulkanalia::bytecode::Bytecode;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
+use vulkanalia::{Device, vk};
+
+#[allow(unsafe_op_in_unsafe_fn)]
 
 pub unsafe fn create_shader_module(
     device: &Device,

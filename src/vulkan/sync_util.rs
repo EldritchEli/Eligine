@@ -1,7 +1,8 @@
-use crate::vulkan::render_app::AppData;
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
+use crate::vulkan::render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
-use vulkanalia::{vk, Device};
+use vulkanalia::{Device, vk};
 
 pub unsafe fn create_sync_objects(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
     let semaphore_info = vk::SemaphoreCreateInfo::builder();

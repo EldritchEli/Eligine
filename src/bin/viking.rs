@@ -1,10 +1,10 @@
 use std::f32::consts::PI;
 
-use glam::{Quat, Vec3};
 use VulcanEngine_0::{
     game_objects::transform::Transform,
     vulkan::renderer::{self, VulkanData},
 };
+use glam::{Quat, Vec3};
 
 use terrors::OneOf;
 use winit::{
@@ -17,14 +17,46 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
     let event_loop = event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut vulkan_data = VulkanData::default();
-    //let mut vulkan_data = renderer::init("Eligine").map_err(OneOf::broaden)?;
-    /* let paths = [
-         "assets/city_building.glb",
-         "assets/bird_orange.glb",
-         "assets/living_room/Rubiks Cube.glb",
-         //"assets/Platformer/Character/glTF/Character.gltf",
-     ];
-     let (_object_keys, _render_keys) = vulkan_data.app.add_render_objects(&paths, true);
-    */
+
+    vulkan_data
+        .set_init(|app| {
+            let paths = [
+                //"assets/bird_orange.glb",
+                //"assets/living_room/Rubiks Cube.glb",
+                "assets/LittleMan.glb",
+                "assets/PlatformerCharacter.glb",
+            ];
+
+            let guy = app.add_object("assets/PlatformerCharacter.glb").unwrap();
+            for g in guy {
+                app.scene
+                    .transform_object(
+                        g,
+                        Transform {
+                            position: Vec3::new(7.0, -2.0, 6.0),
+                            scale: 4.0 * Vec3::ONE,
+                            rotation: Quat::default(),
+                        },
+                    )
+                    .unwrap();
+            }
+            let man = app.add_object("assets/LittleMan.glb").unwrap();
+            let man = man.iter().next().unwrap();
+            let ashtray = app.add_object("assets/living_room/Chair.glb").unwrap();
+            let ashtray = ashtray.iter().next().unwrap();
+
+            app.scene
+                .transform_object(
+                    *man,
+                    Transform {
+                        position: Vec3::new(-0.0, -2.0, 8.0),
+                        scale: 8.0 * Vec3::ONE,
+                        rotation: Quat::default(),
+                    },
+                )
+                .unwrap();
+            let building = app.add_object("assets/city_building.glb").unwrap();
+        })
+        .unwrap();
     event_loop.run_app(&mut vulkan_data).map_err(OneOf::new)
 }

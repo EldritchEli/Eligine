@@ -1,9 +1,10 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::shader_module_util::create_shader_module;
 use crate::vulkan::uniform_buffer_object::PushConstants;
 use crate::vulkan::vertexbuffer_util::Vertex;
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
-use vulkanalia::{vk, Device};
+use vulkanalia::{Device, vk};
 pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
     let vert = include_bytes!("../shaders/vert.spv");
     let frag = include_bytes!("../shaders/frag.spv");

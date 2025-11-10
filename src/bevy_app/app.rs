@@ -23,7 +23,7 @@ impl AssetList {
     }
 }
 
-pub fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>, list: Res<AssetList>) {
+pub fn load_assets(mut _commands: Commands, _asset_server: Res<AssetServer>, list: Res<AssetList>) {
     for asset_path in list.inner_ref().clone() {
         info!("loading path: {}", asset_path);
         /*if let Err(e) = gltf::load::scene(asset_path) {
@@ -55,7 +55,7 @@ impl Plugin for VulkanDefault {
         app.add_plugins(ScenePlugin);
         app.add_plugins(GltfPlugin::default());
         app.add_plugins(ImagePlugin::default());
-        app.init_asset::<bevy_pbr::prelude::StandardMaterial>();
+        // app.init_asset::<bevy_pbr::prelude::StandardMaterial>();
 
         //app.add_plugins(WindowPlugin::default());
         //app.add_plugins(AccessibilityPlugin);

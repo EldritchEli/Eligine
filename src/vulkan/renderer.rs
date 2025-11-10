@@ -2,47 +2,44 @@
     dead_code,
     unused_variables,
     clippy::too_many_arguments,
-    clippy::unnecessary_wraps
+    clippy::unnecessary_wraps,
+    unsafe_op_in_unsafe_fn
 )]
-use crate::game_objects::scene::Scene;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::render_app::App;
-use anyhow::Result;
 
 use log::error;
-use terrors::OneOf;
 use vulkanalia::prelude::v1_0::*;
-use vulkanalia::vk::ErrorCode;
-use vulkanalia::window;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::error::{EventLoopError, OsError};
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{self, ActiveEventLoop};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event::WindowEvent;
+
+use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 use winit::window::{Window, WindowAttributes};
 
 pub enum AppState {
-    Uninitialized { scene: Scene },
+    Uninitialized { init: fn(&mut App) },
     Initialized { app: App },
 }
+
 impl AppState {
     pub fn initialized(&self) -> bool {
         match self {
-            AppState::Uninitialized { scene } => false,
+            AppState::Uninitialized { .. } => false,
             AppState::Initialized { app } => true,
         }
     }
+
     pub fn set_window(&mut self, window: Window) {
         match self {
-            AppState::Uninitialized { scene } => (),
+            AppState::Uninitialized { .. } => (),
             AppState::Initialized { app } => app.window = window,
         }
     }
     pub fn request_redraw(&mut self) {
         match self {
-            AppState::Uninitialized { scene } => todo!(),
+            AppState::Uninitialized { .. } => todo!(),
             AppState::Initialized { app } => app.window.request_redraw(),
         }
     }
@@ -55,6 +52,29 @@ pub struct VulkanData {
     pub render_stamp: f32,
     pub app: AppState,
 }
+impl VulkanData {
+    pub fn set_init(&mut self, init: fn(&mut App)) -> Result<(), String> {
+        if let AppState::Initialized { .. } = self.app {
+            return Err("cannot set init for already initialized app".to_string());
+        }
+        self.app = AppState::Uninitialized { init };
+        Ok(())
+    }
+
+    pub fn run_init(&mut self, window: Window) -> Result<(), String> {
+        let initialized = match &self.app {
+            AppState::Initialized { app } => return Err("already initialized".to_string()),
+            AppState::Uninitialized { init } => {
+                let mut app = unsafe { App::create(window).unwrap() };
+                init(&mut app);
+
+                AppState::Initialized { app: app }
+            }
+        };
+        self.app = initialized;
+        Ok(())
+    }
+}
 
 impl Default for VulkanData {
     fn default() -> Self {
@@ -63,10 +83,8 @@ impl Default for VulkanData {
             window_name: "Eligine".to_string(),
             window_minimized: false,
             time_stamp: 0.0,
-            render_stamp : 0.0,
-            app: AppState::Uninitialized {
-                scene: Scene::default(),
-            },
+            render_stamp: 0.0,
+            app: AppState::Uninitialized { init: |app| {} },
         }
     }
 }
@@ -76,15 +94,13 @@ impl ApplicationHandler for VulkanData {
         let attr = WindowAttributes::default()
             .with_title("Eligine")
             .with_inner_size(LogicalSize::new(1024, 768));
-        //.build(&event_loop)
-
         let window = event_loop.create_window(attr).unwrap();
         window.request_redraw();
         if self.app.initialized() {
             self.app.set_window(window);
         } else {
-            self.app = AppState::Initialized {
-                app: unsafe { App::create(window).unwrap() },
+            if let Err(st) = self.run_init(window) {
+                error!("{}", st);
             }
         }
     }
@@ -96,20 +112,20 @@ impl ApplicationHandler for VulkanData {
         event: WindowEvent,
     ) {
         let app = match &mut self.app {
-            AppState::Uninitialized { scene } => {
+            AppState::Uninitialized { .. } => {
                 error!("uninitialized app");
                 return;
             }
             AppState::Initialized { app } => app,
         };
 
-       let elapsed = app.start.elapsed().as_secs_f32();
-        let mut dt = elapsed - self.time_stamp;
-        
+        let elapsed = app.start.elapsed().as_secs_f32();
+        let dt = elapsed - self.time_stamp;
+
         self.time_stamp = elapsed;
         self.input_state.read_event(&event);
         app.scene.update(dt, &self.input_state);
-       // print!("window event");
+        // print!("window event");
         match event {
             // Request a redraw when all events were processed.
             /* WindowEvent::AboutToWait => self.window.request_redraw(),
@@ -137,19 +153,17 @@ impl ApplicationHandler for VulkanData {
                 }
             }
             WindowEvent::RedrawRequested => {
-        
-        //let elapsed = app.start.elapsed().as_secs_f32();
-            
-        app.window.request_redraw();
-      /*   if elapsed - self.render_stamp > (1.0 / 60.0) {
-            self.render_stamp = elapsed;*/
-            unsafe { app.render() }.unwrap()
-       // }
-            }
-            _ => 
-            /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */{
-            }
+                //let elapsed = app.start.elapsed().as_secs_f32();
 
+                app.window.request_redraw();
+                /*   if elapsed - self.render_stamp > (1.0 / 60.0) {
+                self.render_stamp = elapsed;*/
+                unsafe { app.render() }.unwrap()
+                // }
+            }
+            _ =>
+                /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */
+                {}
         }
     }
 }

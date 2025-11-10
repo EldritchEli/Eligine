@@ -1,6 +1,8 @@
-pub mod game_objects;
-pub mod vulkan;
 pub mod bevy_app;
+pub mod game_objects;
 pub mod gltf;
+pub mod vulkan;
 
-const ASSETS : &str = "assets";
+#[allow(unsafe_op_in_unsafe_fn)]
+
+const ASSETS: &str = "assets";

@@ -3,7 +3,7 @@ use crate::vulkan::descriptor_util::{create_descriptor_sets, create_uniform_buff
 use crate::vulkan::image_util::TextureData;
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexData};
-use glam::{vec2, vec3};
+use glam::{Vec4, vec2, vec3};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
@@ -15,15 +15,21 @@ use tobj::LoadError;
 use vulkanalia::vk::{Buffer, DescriptorSet, DeviceMemory};
 use vulkanalia::{Device, Instance};
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct RenderId(pub usize);
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ObjectId(pub usize);
-#[derive(Clone, Debug)]
 
+#[derive(Clone, Debug)]
+pub struct PBR {
+    pub texture_data: TextureData,
+    pub base: Vec4,
+}
+
+#[derive(Debug, Clone)]
 pub struct RenderObject {
     pub vertex_data: VertexData,
-    pub texture_data: TextureData,
+    pub pbr: PBR,
     pub uniform_buffers: Vec<Buffer>,
     pub uniform_buffers_memory: Vec<DeviceMemory>,
     pub descriptor_sets: Vec<DescriptorSet>,
@@ -39,13 +45,27 @@ impl RenderObject {
         image_path: PathBuf,
     ) -> Result<RenderObject, OneOf<(io::Error, LoadError, String, anyhow::Error)>> {
         let (vertices, indices) = Self::load_model(model_path).map_err(OneOf::broaden)?;
-        let texture_data =
+        let texture_data = unsafe {
             TextureData::create_texture_from_path(instance, device, data, image_path)
-                .map_err(|e| OneOf::new(e))?;
-        let vertex_data = VertexData::create_vertex_data(instance, device, data, vertices, indices)
-            .map_err(|e| OneOf::new(e))?;
-        Self::create_render_object(instance, device, data, vertex_data, texture_data)
+                .map_err(|e| OneOf::new(e))
+        }?;
+        let vertex_data = unsafe {
+            VertexData::create_vertex_data(instance, device, data, vertices, indices)
+                .map_err(|e| OneOf::new(e))
+        }?;
+        unsafe {
+            Self::create_render_object(
+                instance,
+                device,
+                data,
+                vertex_data,
+                PBR {
+                    texture_data,
+                    base: Vec4::ONE,
+                },
+            )
             .map_err(OneOf::broaden)
+        }
     }
 
     pub unsafe fn create_render_object(
@@ -53,27 +73,29 @@ impl RenderObject {
         device: &Device,
         data: &mut AppData,
         vertex_data: VertexData,
-        texture_data: TextureData,
+        pbr: PBR,
     ) -> Result<RenderObject, OneOf<(String, anyhow::Error)>> {
         let mut uniform_buffers = vec![];
         let mut uniform_buffers_memory = vec![];
-        create_uniform_buffers(
-            instance,
-            device,
-            data,
-            &mut uniform_buffers,
-            &mut uniform_buffers_memory,
-        )
-        .map_err(OneOf::new)?;
+        (unsafe {
+            create_uniform_buffers(
+                instance,
+                device,
+                data,
+                &mut uniform_buffers,
+                &mut uniform_buffers_memory,
+            )
+            .map_err(OneOf::new)
+        })?;
         let mut object = Self {
             vertex_data,
-            texture_data,
+            pbr,
             uniform_buffers,
             uniform_buffers_memory,
             descriptor_sets: vec![],
             instances: Default::default(),
         };
-        create_descriptor_sets(device, data, &mut object).map_err(|e| OneOf::new(e))?;
+        (unsafe { create_descriptor_sets(device, data, &mut object).map_err(|e| OneOf::new(e)) })?;
         Ok(object)
     }
 

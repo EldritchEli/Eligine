@@ -1,7 +1,10 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::queue_family_indices::QueueFamilyIndices;
 use crate::vulkan::render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
+
+#[allow(unsafe_op_in_unsafe_fn)]
 
 pub unsafe fn create_command_pool(
     instance: &Instance,

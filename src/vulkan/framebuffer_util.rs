@@ -1,8 +1,9 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::image_util::{create_image, create_image_view};
 use crate::vulkan::render_app::AppData;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use vulkanalia::vk::{DeviceV1_0, HasBuilder, InstanceV1_0};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 
 pub unsafe fn create_framebuffers(device: &Device, data: &mut AppData) -> anyhow::Result<()> {
     data.framebuffers = data

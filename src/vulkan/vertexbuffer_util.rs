@@ -1,3 +1,4 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use anyhow::Result;
 use std::mem::size_of;
 
@@ -8,7 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::ptr::copy_nonoverlapping as memcpy;
 use varlen_macro::define_varlen;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -50,9 +51,9 @@ impl VertexData {
         indices: Vec<u32>,
     ) -> Result<VertexData> {
         let (vertex_buffer, vertex_buffer_memory) =
-            Self::create_vertex_buffer(instance, device, data, &vertices)?;
+            unsafe { Self::create_vertex_buffer(instance, device, data, &vertices) }?;
         let (index_buffer, index_buffer_memory) =
-            Self::create_index_buffer(instance, device, data, &indices)?;
+            unsafe { Self::create_index_buffer(instance, device, data, &indices) }?;
         Ok(VertexData {
             vertices,
             indices,

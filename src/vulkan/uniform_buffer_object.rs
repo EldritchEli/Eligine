@@ -1,4 +1,4 @@
-use glam::Mat4;
+use glam::{Mat4, Vec4};
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -13,4 +13,5 @@ pub struct UniformBufferObject {
     pub proj: Mat4,
     pub inv_view: Mat4,
     pub model: [Mat4; 10],
+    pub base: Vec4,
 }

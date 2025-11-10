@@ -1,19 +1,22 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::swapchain_util::SwapchainSupport;
 use crate::vulkan::{
-    queue_family_indices::QueueFamilyIndices, render_app::AppData, DEVICE_EXTENSIONS,
-    PORTABILITY_MACOS_VERSION, VALIDATION_ENABLED, VALIDATION_LAYER,
+    DEVICE_EXTENSIONS, PORTABILITY_MACOS_VERSION, VALIDATION_ENABLED, VALIDATION_LAYER,
+    queue_family_indices::QueueFamilyIndices, render_app::AppData,
 };
 use anyhow::anyhow;
 use log::{info, warn};
 use std::collections::HashSet;
+
 use thiserror::Error;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder, InstanceV1_0};
-use vulkanalia::{vk, Device, Entry, Instance};
+use vulkanalia::{Device, Entry, Instance, vk};
 
 #[derive(Debug, Error)]
 #[error("Missing {0}.")]
 pub struct SuitabilityError(pub &'static str);
 /// Picks a graphics card
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn pick_physical_device(instance: &Instance, data: &mut AppData) -> anyhow::Result<()> {
     for physical_device in instance.enumerate_physical_devices()? {
         let properties = instance.get_physical_device_properties(physical_device);

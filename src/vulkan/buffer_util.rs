@@ -1,7 +1,7 @@
 use crate::vulkan::render_app::AppData;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder, InstanceV1_0};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 
 /// used to create buffers for various functionss: vertex buffers, uniform buffers, etc.
 pub unsafe fn create_buffer(
@@ -17,22 +17,19 @@ pub unsafe fn create_buffer(
         .usage(usage)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-    let buffer = device.create_buffer(&buffer_info, None)?;
+    let buffer = unsafe { device.create_buffer(&buffer_info, None) }?;
 
-    let requirements = device.get_buffer_memory_requirements(buffer);
+    let requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
 
     let memory_info = vk::MemoryAllocateInfo::builder()
         .allocation_size(requirements.size)
-        .memory_type_index(get_memory_type_index(
-            instance,
-            data,
-            properties,
-            requirements,
-        )?);
+        .memory_type_index(unsafe {
+            get_memory_type_index(instance, data, properties, requirements)
+        }?);
 
-    let buffer_memory = device.allocate_memory(&memory_info, None)?;
+    let buffer_memory = unsafe { device.allocate_memory(&memory_info, None) }?;
 
-    device.bind_buffer_memory(buffer, buffer_memory, 0)?;
+    (unsafe { device.bind_buffer_memory(buffer, buffer_memory, 0) })?;
 
     Ok((buffer, buffer_memory))
 }
@@ -43,7 +40,7 @@ pub unsafe fn get_memory_type_index(
     properties: vk::MemoryPropertyFlags,
     requirements: vk::MemoryRequirements,
 ) -> Result<u32> {
-    let memory = instance.get_physical_device_memory_properties(data.physical_device);
+    let memory = unsafe { instance.get_physical_device_memory_properties(data.physical_device) };
     (0..memory.memory_type_count)
         .find(|i| {
             let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
@@ -60,11 +57,11 @@ pub unsafe fn copy_buffer(
     destination: vk::Buffer,
     size: vk::DeviceSize,
 ) -> Result<()> {
-    let command_buffer = begin_single_time_commands(device, data)?;
+    let command_buffer = unsafe { begin_single_time_commands(device, data) }?;
 
     let regions = vk::BufferCopy::builder().size(size);
-    device.cmd_copy_buffer(command_buffer, source, destination, &[regions]);
-    end_single_time_commands(device, data, command_buffer)?;
+    unsafe { device.cmd_copy_buffer(command_buffer, source, destination, &[regions]) };
+    (unsafe { end_single_time_commands(device, data, command_buffer) })?;
 
     Ok(())
 }
@@ -78,12 +75,12 @@ pub unsafe fn begin_single_time_commands(
         .command_pool(data.command_pool)
         .command_buffer_count(1);
 
-    let command_buffer = device.allocate_command_buffers(&info)?[0];
+    let command_buffer = unsafe { device.allocate_command_buffers(&info) }?[0];
 
     let info =
         vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-    device.begin_command_buffer(command_buffer, &info)?;
+    (unsafe { device.begin_command_buffer(command_buffer, &info) })?;
 
     Ok(command_buffer)
 }
@@ -93,15 +90,15 @@ pub unsafe fn end_single_time_commands(
     data: &AppData,
     command_buffer: vk::CommandBuffer,
 ) -> Result<()> {
-    device.end_command_buffer(command_buffer)?;
+    (unsafe { device.end_command_buffer(command_buffer) })?;
 
     let command_buffers = &[command_buffer];
     let info = vk::SubmitInfo::builder().command_buffers(command_buffers);
 
-    device.queue_submit(data.graphics_queue, &[info], vk::Fence::null())?;
-    device.queue_wait_idle(data.graphics_queue)?;
+    (unsafe { device.queue_submit(data.graphics_queue, &[info], vk::Fence::null()) })?;
+    (unsafe { device.queue_wait_idle(data.graphics_queue) })?;
 
-    device.free_command_buffers(data.command_pool, &[command_buffer]);
+    unsafe { device.free_command_buffers(data.command_pool, &[command_buffer]) };
 
     Ok(())
 }

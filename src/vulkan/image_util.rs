@@ -1,3 +1,4 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use std::fs::File;
 use std::intrinsics::copy_nonoverlapping as memcpy;
 
@@ -5,11 +6,11 @@ use crate::vulkan::buffer_util::{
     begin_single_time_commands, create_buffer, end_single_time_commands, get_memory_type_index,
 };
 use crate::vulkan::render_app::AppData;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use std::path::PathBuf;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder, InstanceV1_0};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 
 #[derive(Clone, Debug)]
 pub struct TextureData {
@@ -124,8 +125,8 @@ impl TextureData {
                 | vk::ImageUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
-        texture_image;
-        texture_image_memory;
+        //texture_image;
+        //texture_image_memory;
 
         transition_image_layout(
             device,

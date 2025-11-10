@@ -1,7 +1,8 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::framebuffer_util::get_depth_format;
 use crate::vulkan::render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 
 pub unsafe fn create_render_pass(
     instance: &Instance,
@@ -21,7 +22,7 @@ pub unsafe fn create_render_pass(
         .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
     let depth_stencil_attachment = vk::AttachmentDescription::builder()
-        .format(get_depth_format(instance, data)?)
+        .format(unsafe { get_depth_format(instance, data) }?)
         .samples(data.msaa_samples)
         .load_op(vk::AttachmentLoadOp::CLEAR)
         .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -95,7 +96,7 @@ pub unsafe fn create_render_pass(
         .subpasses(subpasses)
         .dependencies(dependencies);
 
-    data.render_pass = device.create_render_pass(&info, None)?;
+    data.render_pass = unsafe { device.create_render_pass(&info, None) }?;
 
     Ok(())
 }

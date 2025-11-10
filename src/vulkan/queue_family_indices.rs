@@ -1,8 +1,9 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::device_util::SuitabilityError;
 use crate::vulkan::render_app::AppData;
 use anyhow::anyhow;
 use vulkanalia::vk::{InstanceV1_0, KhrSurfaceExtension};
-use vulkanalia::{vk, Instance};
+use vulkanalia::{Instance, vk};
 
 #[derive(Copy, Clone, Debug)]
 pub struct QueueFamilyIndices {

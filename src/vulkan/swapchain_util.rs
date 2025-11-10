@@ -1,7 +1,8 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::image_util::create_image_view;
 use crate::vulkan::{queue_family_indices::QueueFamilyIndices, render_app::AppData};
 use vulkanalia::vk::{Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
-use vulkanalia::{vk, Device, Instance};
+use vulkanalia::{Device, Instance, vk};
 use winit::window::Window;
 
 fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
@@ -85,8 +86,8 @@ pub unsafe fn create_swapchain(
         .clipped(true)
         .old_swapchain(vk::SwapchainKHR::null());
 
-    data.swapchain = device.create_swapchain_khr(&info, None)?;
-    data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
+    data.swapchain = unsafe { device.create_swapchain_khr(&info, None) }?;
+    data.swapchain_images = unsafe { device.get_swapchain_images_khr(data.swapchain) }?;
 
     data.swapchain_format = surface_format.format;
     data.swapchain_extent = extent;
@@ -107,13 +108,15 @@ pub unsafe fn create_swapchain_image_views(
         .swapchain_images
         .iter()
         .map(|i| {
-            create_image_view(
-                device,
-                *i,
-                data.swapchain_format,
-                vk::ImageAspectFlags::COLOR,
-                1, /* u32 */
-            )
+            unsafe {
+                create_image_view(
+                    device,
+                    *i,
+                    data.swapchain_format,
+                    vk::ImageAspectFlags::COLOR,
+                    1, /* u32 */
+                )
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
 

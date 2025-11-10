@@ -1,6 +1,6 @@
 use crate::{
     game_objects::{
-        render_object::{ObjectId, RenderId, RenderObject},
+        render_object::{ObjectId, PBR, RenderId, RenderObject},
         scene::{GameObject, Scene},
         transform::Transform,
     },
@@ -11,56 +11,45 @@ use crate::{
     },
 };
 
-use glam::{Vec2, Vec3};
-use gltf::json::accessor::{ComponentType, Type};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 use gltf::{
-    self,
+    Accessor, Node, Semantic,
     buffer::{self},
-    image, Accessor, Node, Semantic,
+    image,
+};
+use gltf::{
+    json::accessor::{ComponentType, Type},
+    mesh::util::tex_coords,
 };
 use log::info;
 use std::{collections::HashMap, f32::consts::PI, path::Path};
 use terrors::OneOf;
 use vulkanalia::{Device, Instance};
 
-///loads a single gltf scene. assumes there is only one scene it the gltf file
+const DEFAULT_TEXTURE: [u8; 16] = [
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+];
+///loads a single gltf scene.
 pub fn scene(
     instance: &Instance,
     device: &Device,
     data: &mut AppData,
     scene: &mut Scene,
-    default_instance: bool,
     path: impl AsRef<Path>,
-) -> Result<(Option<Vec<ObjectId>>, Vec<RenderId>), OneOf<(gltf::Error, String, anyhow::Error)>> {
-    println!("pathbuf: {:?}", path.as_ref());
+) -> Result<Vec<ObjectId>, OneOf<(gltf::Error, String, anyhow::Error)>> {
     let (document, buffers, images) = gltf::import(path).map_err(|e| OneOf::new(e))?;
-
-    let mut render_objects: Vec<RenderId> = vec![];
     let mut game_objects: Vec<ObjectId> = vec![];
     for gltf_scene in document.scenes() {
         for node in gltf_scene.nodes() {
-            let (object_id, render_ids) = load_node(
-                instance,
-                device,
-                data,
-                scene,
-                &node,
-                default_instance,
-                &buffers,
-                &images,
-                None,
+            let object_id = load_node(
+                instance, device, data, scene, &node, &buffers, &images, None,
             )?;
-            render_ids.into_iter().for_each(|r| render_objects.push(r));
-            if default_instance {
-                game_objects.push(object_id.unwrap())
-            }
+
+            game_objects.push(object_id.unwrap())
         }
     }
-    if default_instance {
-        Ok((Some(game_objects), render_objects))
-    } else {
-        Ok((None, render_objects))
-    }
+
+    Ok(game_objects)
 }
 
 fn load_node(
@@ -69,33 +58,28 @@ fn load_node(
     data: &mut AppData,
     scene: &mut Scene,
     node: &Node,
-    default_instance: bool,
     buffers: &Vec<buffer::Data>,
     images: &Vec<image::Data>,
-    parent_transform: Option<&glam::Mat4>,
-) -> Result<(Option<ObjectId>, Vec<RenderId>), OneOf<(gltf::Error, String, anyhow::Error)>> {
-    let mut render_object_ids: Vec<RenderId> = vec![];
-    let mut maybe_render_id: Option<RenderId> = None;
-    let mut maybe_object_id: Option<ObjectId> = None;
-
-    info!("loading node {}", node.index());
+    parent: Option<ObjectId>,
+) -> Result<Option<ObjectId>, OneOf<(gltf::Error, String, anyhow::Error)>> {
+    //let mut render_object_ids: Vec<RenderId> = vec![];
+    let mut render_ids: Vec<RenderId> = vec![];
+    //let mut maybe_object_id: Option<ObjectId> = None;
+    println!("node name: {:?}", node.name());
     if let Some(mesh) = node.mesh() {
         println!("mesh primitives: {:?}", mesh.primitives().count());
 
         for prim in mesh.primitives() {
-            let mode = prim.mode();
-            println!("mode: {mode:?}");
-
+            let _mode = prim.mode();
             let mut attr_map = HashMap::new();
             for attr in prim.attributes() {
                 let accessor = prim.get(&attr.0).unwrap();
                 let view = accessor.view().unwrap();
-                println!("attribute index {:?} has type: {:?}  with data type {:?} and dimensions {:?},\
-                with offset {:?}. Its data bufferview is {:?} with buffer offset {:?} and stride {:?}.",
-                         accessor.index(), attr.0, accessor.data_type(), accessor.dimensions(), accessor.offset(), view.index(), view.offset(), view.stride());
+                // println!("attribute index {:?} has type: {:?}  with data type {:?} and dimensions {:?},\
+                //with offset {:?}. Its data bufferview is {:?} with buffer offset {:?} and stride {:?}.",
+                //           accessor.index(), attr.0, accessor.data_type(), accessor.dimensions(), accessor.offset(), view.index(), view.offset(), view.stride());
                 drop(view);
                 let slice = get_buffer_slice(&accessor, buffers);
-
                 attr_map.insert(attr.0, slice);
             }
 
@@ -136,17 +120,28 @@ fn load_node(
                 }
                 _ => panic!("should be unsigned integer type"),
             };
-            println!("indices: {:?}", indices.len());
-            let pbr = prim.material().pbr_metallic_roughness();
-            let texture = pbr.base_color_texture().unwrap();
-            let image = &images[texture.texture().index()];
 
-            let mut pixels = image.pixels.clone();
-            match image.format {
-                image::Format::R8G8B8 => pixels = interleave_alpha_channel(&pixels, 255),
-                image::Format::R8G8B8A8 => (),
-                format => return Err(OneOf::new(format!("weird texture format: {:?}", format))),
-            }
+            let pbr = prim.material().pbr_metallic_roughness();
+            let base = Vec4::from(pbr.base_color_factor());
+            let (pixels, width, height) = match pbr.base_color_texture() {
+                None => {
+                    println!("using default texture");
+                    (Vec::from(DEFAULT_TEXTURE), 1, 1)
+                }
+                Some(texture) => {
+                    let image = &images[texture.texture().index()];
+                    let mut pixels = image.pixels.clone();
+                    match image.format {
+                        image::Format::R8G8B8 => pixels = interleave_alpha_channel(&pixels, 255),
+                        image::Format::R8G8B8A8 => (),
+                        format => {
+                            return Err(OneOf::new(format!("weird texture format: {:?}", format)));
+                        }
+                    }
+                    (pixels, image.width, image.height)
+                }
+            };
+
             let vertex_data = unsafe {
                 VertexData::create_vertex_data(instance, device, data, vertices, indices)
             }
@@ -157,7 +152,7 @@ fn load_node(
                     device,
                     data,
                     pixels,
-                    (image.width, image.height),
+                    (width, height),
                 )
             }
             .map_err(OneOf::new)?;
@@ -167,57 +162,58 @@ fn load_node(
                     device,
                     data,
                     vertex_data,
-                    texture_data,
+                    PBR { texture_data, base },
                 )
             }
             .map_err(OneOf::broaden)?;
-            let render_key = RenderId(scene.render_objects.insert(render_object));
-            maybe_render_id = Some(render_key.clone());
-            render_object_ids.push(render_key);
+            let render_key = scene.render_objects.insert(render_object);
+            render_ids.push(render_key.clone());
         }
     }
     let mut transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
-
-    if let Some(parent_transform) = parent_transform {
+    // if parent.is_none() {
+    //     transform = Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), PI) * transform;
+    // }
+    /*if let Some(parent_transform) = parent_transform {
         transform = parent_transform * transform;
-    }
+    }*/
+
+    //transform = transform;
+    let (scale, rotation, position) = transform.to_scale_rotation_translation();
+    let transform = Transform {
+        position,
+        scale,
+        rotation,
+    };
+    let game_object = GameObject {
+        transform,
+        children: vec![],
+        render_objects: render_ids.clone(),
+        parent,
+    };
+    let maybe_object_id = scene.insert_instance(game_object);
     let mut children = vec![];
     for child in node.children() {
-        let (object_id, render_ids) = load_node(
+        let object_id = load_node(
             instance,
             device,
             data,
             scene,
             &child,
-            default_instance,
             buffers,
             images,
-            Some(&transform),
+            maybe_object_id,
         )?;
-        render_ids
-            .into_iter()
-            .for_each(|r| render_object_ids.push(r));
-        if let Some(id) = object_id {
-            children.push(id);
-        }
+        /*render_ids
+        .into_iter()
+        .for_each(|r| render_object_ids.push(r));*/
+
+        children.push(object_id.unwrap());
     }
 
-    if default_instance {
-        transform = glam::Mat4::from_rotation_x(PI) * transform;
-        let (scale, rotation, position) = transform.to_scale_rotation_translation();
-        let transform = Transform {
-            position,
-            scale,
-            rotation,
-        };
-        let game_object = GameObject {
-            transform,
-            children,
-            render_object: maybe_render_id.clone(),
-        };
-        maybe_object_id = scene.insert_instance(game_object, maybe_render_id.clone());
-    }
-    Ok((maybe_object_id, render_object_ids))
+    let game_object = scene.objects.get_mut(maybe_object_id.unwrap()).unwrap();
+    game_object.children = children;
+    Ok(maybe_object_id)
 }
 
 fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> &'a [u8] {
@@ -252,34 +248,47 @@ fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> 
 
 fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
     let positions = *map.get(&Semantic::Positions).unwrap();
-    let coords = *map.get(&Semantic::TexCoords(0)).unwrap();
-
     assert!(
         positions.len() % 12 == 0,
         "positions must be divisible by 12"
     );
+    let coords = map.get(&Semantic::TexCoords(0));
+    let coord_flag = coords.is_some();
+    let colors = map.get(&Semantic::Colors(0));
+    let color_flag = colors.is_some();
     let positions: &[Vec3] = unsafe { std::mem::transmute(positions) };
 
-    println!("positions: {:?}", positions.len() / 12);
-    assert!(coords.len() % 8 == 0, "coords must be divisible by 8");
-    let coords: &[Vec2] = unsafe { std::mem::transmute(coords) };
-    println!("coords: {:?}", coords.len() / 8);
-
-    assert!(
-        coords.len() / 2 == positions.len() / 3,
-        "attribute lists must be of the same length, 
+    let colors: &[Vec3] = if color_flag {
+        unsafe { std::mem::transmute(*colors.unwrap()) }
+    } else {
+        &[]
+    };
+    let coords: &[Vec2] = if coord_flag {
+        let coords = *coords.unwrap();
+        assert!(coords.len() % 8 == 0, "coords must be divisible by 8");
+        let coords: &[Vec2] = unsafe { std::mem::transmute(coords) };
+        println!("coords: {:?}", coords.len() / 8);
+        assert!(
+            coords.len() / 2 == positions.len() / 3,
+            "attribute lists must be of the same length, 
         but is {} and {}",
-        coords.len() / 2,
-        positions.len() / 3
-    );
+            coords.len() / 2,
+            positions.len() / 3
+        );
+        coords
+    } else {
+        &[]
+    };
+
     let mut vertices = vec![];
 
     for i in 0..positions.len() / 12 {
         let pos = positions[i];
-        let tex_coord = coords[i];
+        let tex_coord = if coord_flag { coords[i] } else { Vec2::ZERO };
+        let color = if color_flag { colors[i] } else { Vec3::ONE };
         vertices.push(Vertex {
             pos,
-            color: Vec3::ONE,
+            color,
             tex_coord,
         });
     }

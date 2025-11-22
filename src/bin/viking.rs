@@ -56,7 +56,7 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                 )
                 .unwrap();
             let building = app.add_object("assets/city_building.glb").unwrap();
-            app.scene.skybox = Some(
+            /*            app.scene.skybox = Some(
                 SkyBox::load(
                     &app.instance,
                     &app.device,
@@ -67,6 +67,21 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                     "assets/skyboxes/pretty_sky/nz.png",
                     "assets/skyboxes/pretty_sky/nx.png",
                     "assets/skyboxes/pretty_sky/px.png",
+                )
+                .unwrap(),
+            )*/
+
+            app.scene.skybox = Some(
+                SkyBox::load(
+                    &app.instance,
+                    &app.device,
+                    &mut app.data,
+                    "assets/skyboxes/nebula/top.png",
+                    "assets/skyboxes/nebula/bottom.png",
+                    "assets/skyboxes/nebula/left.png",
+                    "assets/skyboxes/nebula/right.png",
+                    "assets/skyboxes/nebula/back.png",
+                    "assets/skyboxes/nebula/front.png",
                 )
                 .unwrap(),
             )

@@ -15,6 +15,7 @@ pub unsafe fn create_color_objects(
             data.swapchain_extent.width,
             data.swapchain_extent.height,
             1,
+            1,
             data.msaa_samples,
             data.swapchain_format,
             vk::ImageTiling::OPTIMAL,
@@ -32,6 +33,7 @@ pub unsafe fn create_color_objects(
             data.color_image,
             data.swapchain_format,
             vk::ImageAspectFlags::COLOR,
+            1,
             1,
         )
     }?;

@@ -7,22 +7,19 @@ use crate::{
     vulkan::{
         image_util::TextureData,
         render_app::AppData,
-        vertexbuffer_util::{Vertex, VertexData},
+        vertexbuffer_util::{Vertex, VertexData, VertexPbr},
     },
 };
 
-use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
+use glam::{Vec2, Vec3, Vec4};
+use gltf::json::accessor::{ComponentType, Type};
 use gltf::{
     Accessor, Node, Semantic,
     buffer::{self},
     image,
 };
-use gltf::{
-    json::accessor::{ComponentType, Type},
-    mesh::util::tex_coords,
-};
 use log::info;
-use std::{collections::HashMap, f32::consts::PI, path::Path};
+use std::{collections::HashMap, path::Path};
 use terrors::OneOf;
 use vulkanalia::{Device, Instance};
 
@@ -37,7 +34,7 @@ pub fn scene(
     scene: &mut Scene,
     path: impl AsRef<Path>,
 ) -> Result<Vec<ObjectId>, OneOf<(gltf::Error, String, anyhow::Error)>> {
-    let (document, buffers, images) = gltf::import(path).map_err(|e| OneOf::new(e))?;
+    let (document, buffers, images) = gltf::import(path).unwrap();
     let mut game_objects: Vec<ObjectId> = vec![];
     for gltf_scene in document.scenes() {
         for node in gltf_scene.nodes() {
@@ -75,9 +72,6 @@ fn load_node(
             for attr in prim.attributes() {
                 let accessor = prim.get(&attr.0).unwrap();
                 let view = accessor.view().unwrap();
-                // println!("attribute index {:?} has type: {:?}  with data type {:?} and dimensions {:?},\
-                //with offset {:?}. Its data bufferview is {:?} with buffer offset {:?} and stride {:?}.",
-                //           accessor.index(), attr.0, accessor.data_type(), accessor.dimensions(), accessor.offset(), view.index(), view.offset(), view.stride());
                 drop(view);
                 let slice = get_buffer_slice(&accessor, buffers);
                 attr_map.insert(attr.0, slice);
@@ -170,15 +164,8 @@ fn load_node(
             render_ids.push(render_key.clone());
         }
     }
-    let mut transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
-    // if parent.is_none() {
-    //     transform = Mat4::from_axis_angle(Vec3::new(1.0, 0.0, 0.0), PI) * transform;
-    // }
-    /*if let Some(parent_transform) = parent_transform {
-        transform = parent_transform * transform;
-    }*/
+    let transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
 
-    //transform = transform;
     let (scale, rotation, position) = transform.to_scale_rotation_translation();
     let transform = Transform {
         position,
@@ -204,9 +191,6 @@ fn load_node(
             images,
             maybe_object_id,
         )?;
-        /*render_ids
-        .into_iter()
-        .for_each(|r| render_object_ids.push(r));*/
 
         children.push(object_id.unwrap());
     }
@@ -246,7 +230,7 @@ fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> 
         ..accessor.offset() + view.offset() + accessor.count() * type_size * dimension]
 }
 
-fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
+fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
     let positions = *map.get(&Semantic::Positions).unwrap();
     assert!(
         positions.len() % 12 == 0,
@@ -286,7 +270,7 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<Vertex> {
         let pos = positions[i];
         let tex_coord = if coord_flag { coords[i] } else { Vec2::ZERO };
         let color = if color_flag { colors[i] } else { Vec3::ONE };
-        vertices.push(Vertex {
+        vertices.push(VertexPbr {
             pos,
             color,
             tex_coord,

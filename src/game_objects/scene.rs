@@ -1,5 +1,7 @@
 use crate::game_objects::camera::Camera;
+use crate::game_objects::skybox::SkyBox;
 use crate::vulkan::input_state::InputState;
+use crate::vulkan::vertexbuffer_util::VertexPbr;
 use glam::{Mat4, Vec3};
 use slab::{IntoIter, Iter, IterMut, Slab};
 
@@ -86,7 +88,7 @@ where
         self.slab.remove(id.get_id())
     }
 }
-type RenderSlab = ParaSlab<RenderId, RenderObject>;
+type RenderSlab = ParaSlab<RenderId, RenderObject<VertexPbr>>;
 type ObjectSlab = ParaSlab<ObjectId, GameObject>;
 
 #[derive(Debug)]
@@ -114,6 +116,7 @@ pub struct Scene {
     pub render_objects: RenderSlab,
     pub objects: ObjectSlab,
     materials: Vec<Material>,
+    pub skybox: Option<SkyBox>,
 }
 impl Scene {
     pub fn update(&mut self, delta: f32, input: &InputState) {
@@ -180,6 +183,7 @@ impl Default for Scene {
             render_objects: ParaSlab::new(),
             objects: ParaSlab::new(),
             materials: Vec::default(),
+            skybox: None,
         }
     }
 }

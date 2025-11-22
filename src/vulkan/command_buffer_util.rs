@@ -51,11 +51,32 @@ pub unsafe fn create_command_buffers(
             .clear_values(clear_values);
 
         device.cmd_begin_render_pass(*command_buffer, &info, vk::SubpassContents::INLINE);
+
+        //device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
+        if let Some(skybox) = &scene.skybox {
+            device.cmd_bind_pipeline(
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                data.skybox_pipeline,
+            );
+            device.cmd_bind_descriptor_sets(
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                data.skybox_pipeline_layout,
+                0,
+                &[skybox.descriptors[i]],
+                &[],
+            );
+            device.cmd_draw(*command_buffer, 4, 1, 0, 0);
+        }
+
+        device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         device.cmd_bind_pipeline(
             *command_buffer,
             vk::PipelineBindPoint::GRAPHICS,
-            data.pipeline,
+            data.pbr_pipeline,
         );
+
         for (_, object) in scene.render_objects.iter() {
             device.cmd_bind_vertex_buffers(
                 *command_buffer,
@@ -73,7 +94,7 @@ pub unsafe fn create_command_buffers(
             device.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                data.pipeline_layout,
+                data.pbr_pipeline_layout,
                 0,
                 &[object.descriptor_sets[i]],
                 &[],
@@ -83,7 +104,7 @@ pub unsafe fn create_command_buffers(
             let push_data: [u8; 64] = std::mem::transmute(f32_push_data);
             device.cmd_push_constants(
                 *command_buffer,
-                data.pipeline_layout,
+                data.pbr_pipeline_layout,
                 vk::ShaderStageFlags::VERTEX,
                 0,
                 &push_data,
@@ -98,8 +119,6 @@ pub unsafe fn create_command_buffers(
                 0,
             );
         }
-
-        //device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
 
         device.cmd_end_render_pass(*command_buffer);
         device.end_command_buffer(*command_buffer)?;

@@ -22,6 +22,13 @@ pub struct TextureData {
 }
 
 impl TextureData {
+    pub unsafe fn destroy_image(&self, device: &Device) {
+        device.destroy_sampler(self.sampler, None);
+        device.destroy_image_view(self.image_view, None);
+
+        device.destroy_image(self.image, None);
+        device.free_memory(self.image_memory, None);
+    }
     pub unsafe fn create_texture_from_path(
         instance: &Instance,
         device: &Device,
@@ -30,7 +37,7 @@ impl TextureData {
     ) -> Result<TextureData> {
         let (mip_levels, image, image_memory) =
             Self::load_texture_from_path_buf(instance, device, data, image_path)?;
-        Self::create_texture(device, data, mip_levels, image, image_memory)
+        Self::create_texture(device, data, mip_levels, image, image_memory, 1)
     }
     pub unsafe fn create_texture_from_data(
         instance: &Instance,
@@ -40,8 +47,19 @@ impl TextureData {
         size: (u32, u32),
     ) -> Result<TextureData> {
         let (mip_levels, image, image_memory) =
-            Self::create_texture_image(instance, device, data, pixels, size)?;
-        Self::create_texture(device, data, mip_levels, image, image_memory)
+            Self::create_texture_image(instance, device, data, pixels, (size.0, size.1, 1))?;
+        Self::create_texture(device, data, mip_levels, image, image_memory, 1)
+    }
+    pub unsafe fn create_cubemap_from_data(
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        pixels: Vec<u8>,
+        size: (u32, u32),
+    ) -> Result<TextureData> {
+        let (mip_levels, image, image_memory) =
+            Self::create_cubemap_texture_image(instance, device, data, pixels, (size.0, size.1))?;
+        Self::create_cubemap_texture(device, data, mip_levels, image, image_memory)
     }
     pub unsafe fn create_texture(
         device: &Device,
@@ -49,8 +67,9 @@ impl TextureData {
         mip_levels: u32,
         image: vk::Image,
         image_memory: vk::DeviceMemory,
+        depth: u32,
     ) -> Result<TextureData> {
-        let image_view = Self::create_texture_image_view(image, mip_levels, &device, data)?;
+        let image_view = Self::create_texture_image_view(image, mip_levels, &device, data, depth)?;
         let sampler = Self::create_texture_sampler(mip_levels, device)?;
         Ok(Self {
             mip_levels,
@@ -79,7 +98,7 @@ impl TextureData {
         reader.next_frame(&mut pixels)?;
 
         let (width, height) = reader.info().size();
-        unsafe { Self::create_texture_image(instance, device, data, pixels, (width, height)) }
+        unsafe { Self::create_texture_image(instance, device, data, pixels, (width, height, 1)) }
     }
 
     pub unsafe fn create_texture_image(
@@ -87,9 +106,9 @@ impl TextureData {
         device: &Device,
         data: &mut AppData,
         pixels: Vec<u8>,
-        size: (u32, u32),
+        size: (u32, u32, u32),
     ) -> Result<(u32, vk::Image, vk::DeviceMemory)> {
-        let (width, height) = size;
+        let (width, height, depth) = size;
         let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -116,6 +135,7 @@ impl TextureData {
             data,
             width,
             height,
+            depth,
             mip_levels,
             vk::SampleCountFlags::_1,
             vk::Format::R8G8B8A8_SRGB,
@@ -136,9 +156,18 @@ impl TextureData {
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             mip_levels,
+            1,
         )?;
 
-        copy_buffer_to_image(device, data, staging_buffer, texture_image, width, height)?;
+        copy_buffer_to_image(
+            device,
+            data,
+            staging_buffer,
+            texture_image,
+            width,
+            height,
+            1,
+        )?;
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
 
@@ -150,6 +179,7 @@ impl TextureData {
             vk::Format::R8G8B8A8_SRGB,
             width,
             height,
+            1,
             mip_levels,
         )?;
         Ok((mip_levels, texture_image, texture_image_memory))
@@ -160,6 +190,7 @@ impl TextureData {
         mip_levels: u32,
         device: &Device,
         _data: &mut AppData,
+        depth: u32,
     ) -> Result<vk::ImageView> {
         Ok(create_image_view(
             device,
@@ -167,10 +198,178 @@ impl TextureData {
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageAspectFlags::COLOR,
             mip_levels,
+            depth,
         )?)
     }
 
     pub unsafe fn create_texture_sampler(mip_levels: u32, device: &Device) -> Result<vk::Sampler> {
+        let info = vk::SamplerCreateInfo::builder()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::REPEAT)
+            .address_mode_v(vk::SamplerAddressMode::REPEAT)
+            .address_mode_w(vk::SamplerAddressMode::REPEAT)
+            .anisotropy_enable(true)
+            .max_anisotropy(16.0)
+            .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+            .unnormalized_coordinates(false)
+            .compare_enable(false)
+            .compare_op(vk::CompareOp::ALWAYS)
+            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .mip_lod_bias(0.0)
+            .min_lod(0.0)
+            .max_lod(mip_levels as f32);
+        Ok(device.create_sampler(&info, None)?)
+    }
+
+    pub unsafe fn create_cubemap_texture_image(
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        pixels: Vec<u8>,
+        size: (u32, u32),
+    ) -> Result<(u32, vk::Image, vk::DeviceMemory)> {
+        let (width, height) = size;
+        const depth: u32 = 6;
+        let mip_levels = 1;
+        let (staging_buffer, staging_buffer_memory) = unsafe {
+            create_buffer(
+                instance,
+                device,
+                data,
+                pixels.len() as u64,
+                vk::BufferUsageFlags::TRANSFER_SRC,
+                vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+            )
+        }?;
+
+        let memory = device.map_memory(
+            staging_buffer_memory,
+            0,
+            pixels.len() as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
+        memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
+
+        device.unmap_memory(staging_buffer_memory);
+
+        let usage = vk::ImageUsageFlags::SAMPLED
+            | vk::ImageUsageFlags::TRANSFER_DST
+            | vk::ImageUsageFlags::TRANSFER_SRC;
+        let info = vk::ImageCreateInfo::builder()
+            .flags(vk::ImageCreateFlags::CUBE_COMPATIBLE)
+            .image_type(vk::ImageType::_2D)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(mip_levels)
+            .array_layers(6)
+            .format(vk::Format::R8G8B8A8_SRGB)
+            .tiling(vk::ImageTiling::OPTIMAL)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .usage(usage)
+            .samples(vk::SampleCountFlags::_1)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let texture_image = device.create_image(&info, None)?;
+
+        let requirements = device.get_image_memory_requirements(texture_image);
+
+        let info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(get_memory_type_index(
+                instance,
+                data,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                requirements,
+            )?);
+
+        let texture_image_memory = device.allocate_memory(&info, None)?;
+
+        device.bind_image_memory(texture_image, texture_image_memory, 0)?;
+
+        //texture_image;
+        //texture_image_memory;
+
+        transition_image_layout(
+            device,
+            data,
+            texture_image,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            mip_levels,
+            6,
+        )?;
+
+        copy_buffer_to_image(
+            device,
+            data,
+            staging_buffer,
+            texture_image,
+            width,
+            height,
+            depth,
+        )?;
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+
+        generate_mipmaps(
+            instance,
+            device,
+            data,
+            texture_image,
+            vk::Format::R8G8B8A8_SRGB,
+            width,
+            height,
+            6,
+            mip_levels,
+        )?;
+        Ok((mip_levels, texture_image, texture_image_memory))
+    }
+
+    pub unsafe fn create_cubemap_texture(
+        device: &Device,
+        data: &mut AppData,
+        mip_levels: u32,
+        image: vk::Image,
+        image_memory: vk::DeviceMemory,
+    ) -> Result<TextureData> {
+        let image_view = Self::create_cubemap_image_view(image, mip_levels, &device, data)?;
+        let sampler = Self::create_cubemap_sampler(mip_levels, device)?;
+        Ok(Self {
+            mip_levels,
+            image,
+            image_memory,
+            image_view,
+            sampler,
+        })
+    }
+
+    pub unsafe fn create_cubemap_image_view(
+        image: vk::Image,
+        mip_levels: u32,
+        device: &&Device,
+        data: &mut AppData,
+    ) -> Result<vk::ImageView> {
+        let subresource_range = vk::ImageSubresourceRange::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(mip_levels)
+            .base_array_layer(0)
+            .layer_count(6);
+        let info = vk::ImageViewCreateInfo::builder()
+            .image(image)
+            .view_type(vk::ImageViewType::CUBE)
+            .format(vk::Format::R8G8B8A8_SRGB)
+            .subresource_range(subresource_range);
+
+        Ok(device.create_image_view(&info, None)?)
+    }
+
+    pub unsafe fn create_cubemap_sampler(mip_levels: u32, device: &Device) -> Result<vk::Sampler> {
         let info = vk::SamplerCreateInfo::builder()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -197,6 +396,7 @@ pub unsafe fn create_image(
     data: &AppData,
     width: u32,
     height: u32,
+    depth: u32,
     mip_levels: u32,
     samples: vk::SampleCountFlags,
     format: vk::Format,
@@ -248,6 +448,7 @@ pub unsafe fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
     mip_levels: u32,
+    depth: u32,
 ) -> Result<()> {
     let (src_access_mask, dst_access_mask, src_stage_mask, dst_stage_mask) =
         match (old_layout, new_layout) {
@@ -285,7 +486,7 @@ pub unsafe fn transition_image_layout(
         .base_mip_level(0)
         .level_count(mip_levels)
         .base_array_layer(0)
-        .layer_count(1);
+        .layer_count(depth);
 
     let barrier = vk::ImageMemoryBarrier::builder()
         .old_layout(old_layout)
@@ -306,7 +507,7 @@ pub unsafe fn transition_image_layout(
         &[] as &[vk::BufferMemoryBarrier],
         &[barrier],
     );
-
+    if depth == 6 {}
     end_single_time_commands(device, data, command_buffer)?;
 
     Ok(())
@@ -319,37 +520,39 @@ unsafe fn copy_buffer_to_image(
     image: vk::Image,
     width: u32,
     height: u32,
+    depth: u32,
 ) -> Result<()> {
     let command_buffer = begin_single_time_commands(device, data)?;
-
-    let subresource = vk::ImageSubresourceLayers::builder()
-        .aspect_mask(vk::ImageAspectFlags::COLOR)
-        .mip_level(0)
-        .base_array_layer(0)
-        .layer_count(1);
-
-    let region = vk::BufferImageCopy::builder()
-        .buffer_offset(0)
-        .buffer_row_length(0)
-        .buffer_image_height(0)
-        .image_subresource(subresource)
-        .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-        .image_extent(vk::Extent3D {
-            width,
-            height,
-            depth: 1,
-        });
-    println!("before");
+    let mut regions = vec![];
+    for i in 0..1 {
+        println!("pass {:?}", i);
+        let subresource = vk::ImageSubresourceLayers::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .mip_level(0)
+            .base_array_layer(i)
+            .layer_count(6);
+        let region = vk::BufferImageCopy::builder()
+            .buffer_offset((width * height * 4 * i) as u64)
+            .buffer_row_length(width)
+            .buffer_image_height(height)
+            .image_subresource(subresource)
+            .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .image_extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            });
+        regions.push(region);
+    }
     device.cmd_copy_buffer_to_image(
         command_buffer,
         buffer,
         image,
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        &[region],
+        regions.as_slice(),
     );
-    println!("after");
+    if depth == 6 {}
     end_single_time_commands(device, data, command_buffer)?;
-    println!("after");
     Ok(())
 }
 
@@ -359,6 +562,7 @@ pub unsafe fn create_image_view(
     format: vk::Format,
     aspects: vk::ImageAspectFlags,
     mip_levels: u32,
+    depth: u32,
 ) -> Result<vk::ImageView> {
     let subresource_range = vk::ImageSubresourceRange::builder()
         .aspect_mask(aspects)
@@ -366,10 +570,14 @@ pub unsafe fn create_image_view(
         .level_count(mip_levels)
         .base_array_layer(0)
         .layer_count(1);
-
+    let view_type = if depth <= 1 {
+        vk::ImageViewType::_2D
+    } else {
+        vk::ImageViewType::_3D
+    };
     let info = vk::ImageViewCreateInfo::builder()
         .image(image)
-        .view_type(vk::ImageViewType::_2D)
+        .view_type(view_type)
         .format(format)
         .subresource_range(subresource_range);
 
@@ -384,6 +592,7 @@ unsafe fn generate_mipmaps(
     format: vk::Format,
     width: u32,
     height: u32,
+    depth: u32,
     mip_levels: u32,
 ) -> Result<()> {
     // Support
@@ -405,7 +614,7 @@ unsafe fn generate_mipmaps(
     let subresource = vk::ImageSubresourceRange::builder()
         .aspect_mask(vk::ImageAspectFlags::COLOR)
         .base_array_layer(0)
-        .layer_count(1)
+        .layer_count(depth)
         .level_count(1);
 
     let mut barrier = vk::ImageMemoryBarrier::builder()
@@ -438,13 +647,13 @@ unsafe fn generate_mipmaps(
             .aspect_mask(vk::ImageAspectFlags::COLOR)
             .mip_level(i - 1)
             .base_array_layer(0)
-            .layer_count(1);
+            .layer_count(depth);
 
         let dst_subresource = vk::ImageSubresourceLayers::builder()
             .aspect_mask(vk::ImageAspectFlags::COLOR)
             .mip_level(i)
             .base_array_layer(0)
-            .layer_count(1);
+            .layer_count(depth);
 
         let blit = vk::ImageBlit::builder()
             .src_offsets([

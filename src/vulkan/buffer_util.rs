@@ -94,10 +94,8 @@ pub unsafe fn end_single_time_commands(
 
     let command_buffers = &[command_buffer];
     let info = vk::SubmitInfo::builder().command_buffers(command_buffers);
-
     (unsafe { device.queue_submit(data.graphics_queue, &[info], vk::Fence::null()) })?;
     (unsafe { device.queue_wait_idle(data.graphics_queue) })?;
-
     unsafe { device.free_command_buffers(data.command_pool, &[command_buffer]) };
 
     Ok(())

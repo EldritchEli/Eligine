@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 use crate::vulkan::buffer_util::{copy_buffer, create_buffer};
 use crate::vulkan::render_app::AppData;
-use glam::{Vec2, Vec3};
+use glam::{Vec2, Vec3, vec3};
 use std::hash::{Hash, Hasher};
 use std::ptr::copy_nonoverlapping as memcpy;
 use varlen_macro::define_varlen;
@@ -27,14 +27,38 @@ pub enum Colors {
 }
 
 pub enum Attribute {
-    Vertex,
+    VertexPbr,
     Normal,
     TexCoord,
 }
-
+pub unsafe fn quad_vertex_data(
+    width: u32,
+    height: u32,
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+) -> Result<VertexData<SimpleVertex>> {
+    let vertices = vec![
+        SimpleVertex { pos: Vec3::ZERO },
+        SimpleVertex {
+            pos: vec3(0.0, height as f32, 0.0),
+        },
+        SimpleVertex {
+            pos: vec3(width as f32, 0.0, 0.0),
+        },
+        SimpleVertex {
+            pos: vec3(width as f32, height as f32, 0.0),
+        },
+    ];
+    let indices = vec![0, 2, 1, 1, 2, 3];
+    unsafe { VertexData::create_vertex_data(instance, device, data, vertices, indices) }
+}
 #[derive(Clone, Debug, Default)]
-pub struct VertexData {
-    pub vertices: Vec<Vertex>,
+pub struct VertexData<V>
+where
+    V: Vertex,
+{
+    pub vertices: Vec<V>,
     pub indices: Vec<u32>,
     pub vertex_buffer: vk::Buffer,
     pub vertex_buffer_memory: vk::DeviceMemory,
@@ -42,14 +66,17 @@ pub struct VertexData {
     pub index_buffer_memory: vk::DeviceMemory,
 }
 
-impl VertexData {
+impl<V> VertexData<V>
+where
+    V: Vertex,
+{
     pub unsafe fn create_vertex_data(
         instance: &Instance,
         device: &Device,
         data: &mut AppData,
-        vertices: Vec<Vertex>,
+        vertices: Vec<V>,
         indices: Vec<u32>,
-    ) -> Result<VertexData> {
+    ) -> Result<Self> {
         let (vertex_buffer, vertex_buffer_memory) =
             unsafe { Self::create_vertex_buffer(instance, device, data, &vertices) }?;
         let (index_buffer, index_buffer_memory) =
@@ -67,9 +94,9 @@ impl VertexData {
         instance: &Instance,
         device: &Device,
         data: &mut AppData,
-        vertices: &Vec<Vertex>,
+        vertices: &Vec<V>,
     ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let size = (size_of::<Vertex>() * vertices.len()/*VERTICES.len()*/) as u64;
+        let size = (size_of::<VertexPbr>() * vertices.len()/*VERTICES.len()*/) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -162,7 +189,7 @@ impl VertexData {
         for index in &model.mesh.indices {
             let pos_offset = (3 * index) as usize;
             let tex_coord_offset = (2 * index) as usize;
-            let vertex = Vertex {
+            let VertexPbr = VertexPbr {
                 pos: vec3(
                     model.mesh.positions[pos_offset],
                     model.mesh.positions[pos_offset + 1],
@@ -177,12 +204,12 @@ impl VertexData {
             };
 
 
-            if let Some(index) = unique_vertices.get(&vertex) {
+            if let Some(index) = unique_vertices.get(&VertexPbr) {
                 data.indices.push(*index as u32);
             } else {
                 let index = data.vertices.len();
-                unique_vertices.insert(vertex, index);
-                data.vertices.push(vertex);
+                unique_vertices.insert(VertexPbr, index);
+                data.vertices.push(VertexPbr);
                 data.indices.push(index as u32);
             }
 
@@ -216,7 +243,6 @@ impl MeshData {
 
 */
 
-pub const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4];
 /*
 pub fn test_mesh1() -> MeshData{ MeshData {
     positions: [vec3(-0.5, -0.5, 0.0),
@@ -230,7 +256,7 @@ pub fn test_mesh1() -> MeshData{ MeshData {
     normals: None,
     indices: Some(Vec::from([0u16, 1u16, 2u16, 2u16, 3u16, 0u16,
         4u16, 5u16, 6u16, 6u16, 7u16, 4u16])),
-    vertex_count: 8,
+    VertexPbr_count: 8,
     colors: Colors::Texture(Texture {
         tex_string: "src/resources/birk.png".to_string(),
         tex_coords: Vec::from([vec2(1.0, 0.0), vec2(0.0, 0.0),
@@ -241,16 +267,25 @@ pub fn test_mesh1() -> MeshData{ MeshData {
     })
 }
 }*/
-
+pub trait Vertex {
+    fn binding_description() -> vk::VertexInputBindingDescription {
+        vk::VertexInputBindingDescription::builder()
+            .binding(0)
+            .stride(size_of::<VertexPbr>() as u32)
+            .input_rate(vk::VertexInputRate::VERTEX)
+            .build()
+    }
+    fn attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription>;
+}
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct Vertex {
+pub struct VertexPbr {
     pub pos: Vec3,
     pub color: Vec3,
     pub tex_coord: Vec2,
 }
 
-impl Vertex {
+impl VertexPbr {
     pub const fn new(pos: Vec3, color: Vec3, tex_coord: Vec2) -> Self {
         Self {
             pos,
@@ -258,16 +293,9 @@ impl Vertex {
             tex_coord,
         }
     }
-
-    pub fn binding_description() -> vk::VertexInputBindingDescription {
-        vk::VertexInputBindingDescription::builder()
-            .binding(0)
-            .stride(size_of::<Vertex>() as u32)
-            .input_rate(vk::VertexInputRate::VERTEX)
-            .build()
-    }
-
-    pub fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
+}
+impl Vertex for VertexPbr {
+    fn attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
         let pos = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(0)
@@ -286,19 +314,38 @@ impl Vertex {
             .format(vk::Format::R32G32_SFLOAT)
             .offset((size_of::<Vec3>() + size_of::<Vec3>()) as u32)
             .build();
-        [pos, color, tex_coord]
+        vec![pos, color, tex_coord]
     }
 }
 
-impl PartialEq for Vertex {
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct SimpleVertex {
+    pos: Vec3,
+}
+
+impl Vertex for SimpleVertex {
+    fn attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
+        vec![
+            vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(0)
+                .format(vk::Format::R32G32B32_SFLOAT)
+                .offset(0)
+                .build(),
+        ]
+    }
+}
+
+/*impl PartialEq for VertexPbr {
     fn eq(&self, other: &Self) -> bool {
         self.pos == other.pos && self.color == other.color && self.tex_coord == other.tex_coord
     }
 }
 
-impl Eq for Vertex {}
-
-impl Hash for Vertex {
+impl Eq for VertexPbr {}
+*/
+/*impl Hash for VertexPbr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.pos[0].to_bits().hash(state);
         self.pos[1].to_bits().hash(state);
@@ -309,4 +356,4 @@ impl Hash for Vertex {
         self.tex_coord[0].to_bits().hash(state);
         self.tex_coord[1].to_bits().hash(state);
     }
-}
+}*/

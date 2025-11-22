@@ -1,7 +1,10 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::framebuffer_util::get_depth_format;
 use crate::vulkan::render_app::AppData;
-use vulkanalia::vk::{DeviceV1_0, HasBuilder};
+use vulkanalia::vk::{
+    AttachmentReference, AttachmentReferenceBuilder, DeviceV1_0, HasBuilder,
+    SubpassDescriptionBuilder,
+};
 use vulkanalia::{Device, Instance, vk};
 
 pub unsafe fn create_render_pass(
@@ -57,7 +60,7 @@ pub unsafe fn create_render_pass(
 
     let color_attachments = &[color_attachment_ref];
     let resolve_attachments = &[color_resolve_attachment_ref];
-    let subpass = vk::SubpassDescription::builder()
+    let main_subpass = vk::SubpassDescription::builder()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
         .color_attachments(color_attachments)
         .depth_stencil_attachment(&depth_stencil_attachment_ref)
@@ -65,9 +68,9 @@ pub unsafe fn create_render_pass(
 
     // Dependencies
 
-    let dependency = vk::SubpassDependency::builder()
+    let main_dependency = vk::SubpassDependency::builder()
         .src_subpass(vk::SUBPASS_EXTERNAL)
-        .dst_subpass(0)
+        .dst_subpass(1)
         .src_stage_mask(
             vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
                 | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
@@ -89,8 +92,27 @@ pub unsafe fn create_render_pass(
         depth_stencil_attachment,
         color_resolve_attachment,
     ];
-    let subpasses = &[subpass];
-    let dependencies = &[dependency];
+    let skybox_subpass = skybox_subpass(
+        color_attachments,
+        &depth_stencil_attachment_ref,
+        resolve_attachments,
+    );
+    let main_skybox_dependency = vk::SubpassDependency::builder()
+        .src_subpass(vk::SUBPASS_EXTERNAL) // main
+        .dst_subpass(0) //skybox
+        .src_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
+        .dst_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
+        .src_access_mask(vk::AccessFlags::empty())
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+
+    let subpasses = &[skybox_subpass, main_subpass];
+    let dependencies = &[main_skybox_dependency, main_dependency];
     let info = vk::RenderPassCreateInfo::builder()
         .attachments(attachments)
         .subpasses(subpasses)
@@ -99,4 +121,16 @@ pub unsafe fn create_render_pass(
     data.render_pass = unsafe { device.create_render_pass(&info, None) }?;
 
     Ok(())
+}
+
+pub fn skybox_subpass<'a>(
+    color: &'a [AttachmentReferenceBuilder],
+    depth: &'a AttachmentReferenceBuilder,
+    resolve: &'a [AttachmentReferenceBuilder],
+) -> SubpassDescriptionBuilder<'a> {
+    let subpass = vk::SubpassDescription::builder()
+        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        .color_attachments(color)
+        .resolve_attachments(resolve);
+    subpass
 }

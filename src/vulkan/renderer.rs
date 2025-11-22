@@ -8,6 +8,7 @@
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::render_app::App;
 
+//use egui_winit_vulkano::{Gui, GuiConfig};
 use log::error;
 use vulkanalia::prelude::v1_0::*;
 use winit::application::ApplicationHandler;
@@ -51,6 +52,7 @@ pub struct VulkanData {
     pub time_stamp: f32,
     pub render_stamp: f32,
     pub app: AppState,
+    //pub gui: Option<Gui>,
 }
 impl VulkanData {
     pub fn set_init(&mut self, init: fn(&mut App)) -> Result<(), String> {
@@ -62,17 +64,17 @@ impl VulkanData {
     }
 
     pub fn run_init(&mut self, window: Window) -> Result<(), String> {
-        let initialized = match &self.app {
-            AppState::Initialized { app } => return Err("already initialized".to_string()),
+        match &self.app {
+            AppState::Initialized { app } => Err("already initialized".to_string()),
             AppState::Uninitialized { init } => {
                 let mut app = unsafe { App::create(window).unwrap() };
+
                 init(&mut app);
 
-                AppState::Initialized { app: app }
+                self.app = AppState::Initialized { app: app };
+                Ok(())
             }
-        };
-        self.app = initialized;
-        Ok(())
+        }
     }
 }
 
@@ -85,6 +87,7 @@ impl Default for VulkanData {
             time_stamp: 0.0,
             render_stamp: 0.0,
             app: AppState::Uninitialized { init: |app| {} },
+            //gui: None,
         }
     }
 }
@@ -100,7 +103,7 @@ impl ApplicationHandler for VulkanData {
             self.app.set_window(window);
         } else {
             if let Err(st) = self.run_init(window) {
-                error!("{}", st);
+                error!("{:?}", st);
             }
         }
     }
@@ -125,15 +128,7 @@ impl ApplicationHandler for VulkanData {
         self.time_stamp = elapsed;
         self.input_state.read_event(&event);
         app.scene.update(dt, &self.input_state);
-        // print!("window event");
         match event {
-            // Request a redraw when all events were processed.
-            /* WindowEvent::AboutToWait => self.window.request_redraw(),
-            Event::WindowEvent {
-                event: WindowEvent::Resized(_),
-                ..
-            } => app.resized = true,*/
-            // Render a frame if our Vulkan app is not being destroyed.
             WindowEvent::Resized(size) => {
                 if size.width == 0 || size.height == 0 {
                     self.window_minimized = true;
@@ -142,8 +137,9 @@ impl ApplicationHandler for VulkanData {
                     app.resized = true;
                 }
             }
-            // Destroy our Vulkan app.
-            WindowEvent::CloseRequested => {
+
+            WindowEvent::Destroyed => {
+                println!("window destroyed");
                 event_loop.exit();
                 unsafe {
                     app.device.device_wait_idle().unwrap();
@@ -152,12 +148,17 @@ impl ApplicationHandler for VulkanData {
                     app.destroy();
                 }
             }
-            WindowEvent::RedrawRequested => {
-                //let elapsed = app.start.elapsed().as_secs_f32();
+            // Destroy our Vulkan app.
+            WindowEvent::CloseRequested => {
+                println!("window closed");
 
+                unsafe {
+                    app.destroy();
+                }
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
                 app.window.request_redraw();
-                /*   if elapsed - self.render_stamp > (1.0 / 60.0) {
-                self.render_stamp = elapsed;*/
                 unsafe { app.render() }.unwrap()
                 // }
             }
@@ -167,90 +168,3 @@ impl ApplicationHandler for VulkanData {
         }
     }
 }
-/*
-pub fn init(
-    window_name: &str,
-) -> Result<VulkanData, OneOf<(OsError, EventLoopError, anyhow::Error)>> {
-    pretty_env_logger::init();
-    let input_state = InputState::new();
-    //let event_loop = ActiveEventLoop::create_window(&self, WindowAttributes::)
-    // Window
-    let event_loop = EventLoop::new().map_err(|e| OneOf::new(e))?;
-    let window = event_loop
-        .create_window(
-            WindowAttributes::new()
-                .with_title("Eligine")
-                .with_inner_size(LogicalSize::new(1024, 768)), //.build(&event_loop)
-        )
-        .unwrap();
-    let app = unsafe { App::create(&window).map_err(|e| OneOf::new(e))? };
-    let time_stamp = 0.0;
-    let window_minimized = false; //window minimize
-    Ok(VulkanData {
-        input_state,
-        event_loop,
-        app: Some(app),
-        window_minimized,
-        time_stamp,
-    })
-}
-*/
-/*
-pub fn run(
-    vulkan_data: VulkanData,
-) -> Result<(), OneOf<(anyhow::Error, ErrorCode, EventLoopError)>> {
-    let VulkanData {
-        mut input_state,
-        event_loop,
-        window,
-        mut window_minimized,
-        mut time_stamp,
-        mut app,
-    } = vulkan_data;
-    event_loop
-        .run(move |event, elwt| {
-            let elapsed = app.start.elapsed().as_secs_f32();
-            let dt = elapsed - time_stamp;
-
-            time_stamp = elapsed;
-            input_state.read_event(&event);
-            app.scene.update(dt, &input_state);
-            match event {
-                // Request a redraw when all events were processed.
-                Event::AboutToWait => window.request_redraw(),
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(_),
-                    ..
-                } => app.resized = true,
-                Event::WindowEvent { event, .. } => match event {
-                    // Render a frame if our Vulkan app is not being destroyed.
-                    WindowEvent::RedrawRequested if !elwt.exiting() && !window_minimized => {
-                        unsafe { app.render(&window) }.unwrap()
-                    }
-                    WindowEvent::Resized(size) => {
-                        if size.width == 0 || size.height == 0 {
-                            window_minimized = true;
-                        } else {
-                            window_minimized = false;
-                            app.resized = true;
-                        }
-                    }
-                    // Destroy our Vulkan app.
-                    WindowEvent::CloseRequested => {
-                        elwt.exit();
-                        unsafe {
-                            app.device.device_wait_idle().unwrap();
-                        }
-                        unsafe {
-                            app.destroy();
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        })
-        .map_err(|e| OneOf::new(e))?;
-    Ok(())
-}
-*/

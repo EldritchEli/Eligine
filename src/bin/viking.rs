@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 
 use VulcanEngine_0::{
-    game_objects::transform::Transform,
+    game_objects::{skybox::SkyBox, transform::Transform},
     vulkan::renderer::{self, VulkanData},
 };
 use glam::{Quat, Vec3};
@@ -56,6 +56,20 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                 )
                 .unwrap();
             let building = app.add_object("assets/city_building.glb").unwrap();
+            app.scene.skybox = Some(
+                SkyBox::load(
+                    &app.instance,
+                    &app.device,
+                    &mut app.data,
+                    "assets/skyboxes/pretty_sky/py.png",
+                    "assets/skyboxes/pretty_sky/ny.png",
+                    "assets/skyboxes/pretty_sky/pz.png",
+                    "assets/skyboxes/pretty_sky/nz.png",
+                    "assets/skyboxes/pretty_sky/nx.png",
+                    "assets/skyboxes/pretty_sky/px.png",
+                )
+                .unwrap(),
+            )
         })
         .unwrap();
     event_loop.run_app(&mut vulkan_data).map_err(OneOf::new)

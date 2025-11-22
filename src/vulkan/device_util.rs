@@ -9,7 +9,7 @@ use log::{info, warn};
 use std::collections::HashSet;
 
 use thiserror::Error;
-use vulkanalia::vk::{DeviceV1_0, HasBuilder, InstanceV1_0};
+use vulkanalia::vk::{DeviceV1_0, DeviceV1_4, HasBuilder, InstanceV1_0, InstanceV1_4};
 use vulkanalia::{Device, Entry, Instance, vk};
 
 #[derive(Debug, Error)]
@@ -107,7 +107,9 @@ pub unsafe fn create_logical_device(
         .iter()
         .map(|n| n.as_ptr())
         .collect::<Vec<_>>();
-
+    extensions
+        .iter()
+        .for_each(|e| println!("extension {:?}", e));
     // Required by Vulkan SDK on macOS since 1.3.216.
     if cfg!(target_os = "macos") && entry.version()? >= PORTABILITY_MACOS_VERSION {
         extensions.push(vk::KHR_PORTABILITY_SUBSET_EXTENSION.name.as_ptr());

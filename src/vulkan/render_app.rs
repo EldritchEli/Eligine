@@ -1,18 +1,22 @@
 #![allow(unsafe_op_in_unsafe_fn)]
+use crate::game_objects::skybox;
 use crate::gltf;
 use crate::vulkan::command_buffer_util::create_command_buffers;
 use crate::vulkan::command_pool::{create_command_pool, create_transient_command_pool};
 use crate::vulkan::descriptor_util::{
-    create_descriptor_pool, create_descriptor_set_layout, create_descriptor_sets,
-    create_uniform_buffers,
+    create_descriptor_pool, create_descriptor_set_layout, create_global_buffers,
+    create_pbr_descriptor_sets, create_skybox_descriptor_sets, create_uniform_buffers,
+    skybox_descriptor_set_layout,
 };
 use crate::vulkan::device_util::{create_logical_device, pick_physical_device};
 use crate::vulkan::framebuffer_util::{create_depth_objects, create_framebuffers};
 use crate::vulkan::instance_util::create_instance;
-use crate::vulkan::pipeline_util::create_pipeline;
+use crate::vulkan::pipeline_util::{create_pbr_pipeline, skybox_pipeline};
 use crate::vulkan::render_pass_util::create_render_pass;
 use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::vulkan::sync_util::create_sync_objects;
+use crate::vulkan::uniform_buffer_object::{GlobalUniform, PbrUniform, UniformBuffer};
+use crate::vulkan::vertexbuffer_util::{SimpleVertex, Vertex, VertexPbr};
 use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
 use std::f32::consts::PI;
@@ -30,7 +34,6 @@ use winit::window::Window;
 use crate::game_objects::render_object::{ObjectId, RenderId};
 use crate::game_objects::scene::Scene;
 use crate::vulkan::color_objects::create_color_objects;
-use crate::vulkan::uniform_buffer_object::UniformBufferObject;
 use glam::{Mat4, Vec4};
 use std::ptr::copy_nonoverlapping as memcpy;
 
@@ -66,9 +69,13 @@ pub struct AppData {
 
     pub render_pass: vk::RenderPass,
     pub descriptor_set_layout: vk::DescriptorSetLayout,
-    pub pipeline_layout: vk::PipelineLayout,
-    pub pipeline: vk::Pipeline,
-
+    pub skybox_descriptor_set_layout: vk::DescriptorSetLayout,
+    pub pbr_pipeline_layout: vk::PipelineLayout,
+    pub pbr_pipeline: vk::Pipeline,
+    pub skybox_pipeline_layout: vk::PipelineLayout,
+    pub skybox_pipeline: vk::Pipeline,
+    pub global_buffer: Vec<vk::Buffer>,
+    pub global_buffer_memory: Vec<vk::DeviceMemory>,
     pub framebuffers: Vec<vk::Framebuffer>,
 
     pub command_pool: vk::CommandPool,
@@ -105,13 +112,15 @@ impl App {
         pick_physical_device(&instance, &mut data)?;
         let device = create_logical_device(&entry, &instance, &mut data)?;
         let start = Instant::now();
-
+        let x = window.inner_size().width as f32;
+        let y = window.inner_size().height as f32;
         create_swapchain(&window, &instance, &device, &mut data)?;
         create_swapchain_image_views(&device, &mut data)?;
         create_render_pass(&instance, &device, &mut data)?;
         create_descriptor_set_layout(&device, &mut data)?;
-
-        create_pipeline(&device, &mut data)?;
+        skybox_descriptor_set_layout(&device, &mut data)?;
+        create_pbr_pipeline(&device, &mut data)?;
+        skybox_pipeline(&device, &mut data)?;
         create_command_pool(&instance, &device, &mut data)?;
         create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
@@ -160,29 +169,34 @@ impl App {
     }
 
     unsafe fn recreate_swapchain(&mut self) -> anyhow::Result<()> {
-        println!("recreate_swapchain");
         self.device.device_wait_idle()?;
         self.destroy_swapchain();
         create_swapchain(&self.window, &self.instance, &self.device, &mut self.data)?;
         create_swapchain_image_views(&self.device, &mut self.data)?;
         create_render_pass(&self.instance, &self.device, &mut self.data)?;
-        create_pipeline(&self.device, &mut self.data)?;
+        skybox_pipeline(&self.device, &mut self.data)?;
+        create_pbr_pipeline(&self.device, &mut self.data)?;
         create_color_objects(&self.instance, &self.device, &mut self.data)?;
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
         //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data, 30)?;
         for (_, object) in self.scene.render_objects.iter_mut() {
-            create_uniform_buffers(
+            create_uniform_buffers::<PbrUniform>(
                 &self.instance,
                 &self.device,
                 &mut self.data,
                 &mut object.uniform_buffers,
                 &mut object.uniform_buffers_memory,
             )?;
-            create_descriptor_sets(&self.device, &mut self.data, object)?;
+            create_pbr_descriptor_sets::<VertexPbr, PbrUniform>(
+                &self.device,
+                &mut self.data,
+                object,
+            )?;
         }
-        //create_descriptor_sets(&self.device, &mut self.data)?;
+        create_global_buffers(&self.instance, &self.device, &mut self.data)?;
+        create_skybox_descriptor_sets(&self.device, &self.data, &mut self.scene)?;
         create_command_buffers(&self.device, &mut self.scene, &mut self.data)?;
         Ok(())
     }
@@ -224,18 +238,19 @@ impl App {
                 let instance = self.scene.objects.get(*instance_index).unwrap();
                 model[index] = instance.global_matrix(&self.scene);
             }
-            let ubo = UniformBufferObject {
+            let ubo = PbrUniform {
                 view,
                 proj,
                 inv_view,
                 model,
                 base: object.pbr.base,
             };
+            //ubo.map_memory(&self.device, object.uniform_buffers_memory[image_index])?;
             let memory = unsafe {
                 self.device.map_memory(
                     object.uniform_buffers_memory[image_index],
                     0,
-                    size_of::<UniformBufferObject>() as u64,
+                    size_of::<PbrUniform>() as u64,
                     vk::MemoryMapFlags::empty(),
                 )
             }?;
@@ -244,6 +259,26 @@ impl App {
 
             self.device
                 .unmap_memory(object.uniform_buffers_memory[image_index]);
+        }
+        if let Some(skybox) = &self.scene.skybox {
+            let memory = unsafe {
+                self.device.map_memory(
+                    self.data.global_buffer_memory[image_index],
+                    0,
+                    size_of::<GlobalUniform>() as u64,
+                    vk::MemoryMapFlags::empty(),
+                )
+            }?;
+            let ubo = GlobalUniform {
+                view,
+                proj,
+                x: self.window.outer_size().width as f32 * 2.0,
+                y: self.window.outer_size().height as f32 * 2.0,
+            };
+            memcpy(&ubo, memory.cast(), 1);
+
+            self.device
+                .unmap_memory(self.data.global_buffer_memory[image_index]);
         }
         Ok(())
     }
@@ -259,11 +294,12 @@ impl App {
             self.data.image_available_semaphores[self.frame],
             vk::Fence::null(),
         );
+        let sem = self.data.image_available_semaphores[self.frame];
 
         let image_index = match result {
-            Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => return self.recreate_swapchain(),
+            //Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => return self.recreate_swapchain(),
             Ok((image_index, _)) => image_index as usize,
-            Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(),
+            //Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(),
             Err(e) => return Err(anyhow!(e)),
         };
 
@@ -339,7 +375,8 @@ impl App {
 
         self.device
             .destroy_descriptor_set_layout(self.data.descriptor_set_layout, None);
-
+        self.device
+            .destroy_descriptor_set_layout(self.data.skybox_descriptor_set_layout, None);
         self.data
             .in_flight_fences
             .iter()
@@ -361,6 +398,9 @@ impl App {
                 .free_memory(object.vertex_data.index_buffer_memory, None);
             self.device
                 .destroy_buffer(object.vertex_data.index_buffer, None);
+        }
+        if let Some(skybox) = &self.scene.skybox {
+            skybox.texture_data.destroy_image(&self.device);
         }
 
         self.device
@@ -399,6 +439,14 @@ impl App {
                 .iter()
                 .for_each(|m| self.device.free_memory(*m, None));
         });
+        self.data
+            .global_buffer
+            .iter()
+            .for_each(|b| self.device.destroy_buffer(*b, None));
+        self.data
+            .global_buffer_memory
+            .iter()
+            .for_each(|m| self.device.free_memory(*m, None));
 
         /*self.data
             .uniform_buffers
@@ -415,9 +463,13 @@ impl App {
             .for_each(|f| self.device.destroy_framebuffer(*f, None));
         self.device
             .free_command_buffers(self.data.command_pool, &self.data.command_buffers);
-        self.device.destroy_pipeline(self.data.pipeline, None);
+        self.device.destroy_pipeline(self.data.pbr_pipeline, None);
         self.device
-            .destroy_pipeline_layout(self.data.pipeline_layout, None);
+            .destroy_pipeline_layout(self.data.pbr_pipeline_layout, None);
+        self.device
+            .destroy_pipeline(self.data.skybox_pipeline, None);
+        self.device
+            .destroy_pipeline_layout(self.data.skybox_pipeline_layout, None);
         self.device.destroy_render_pass(self.data.render_pass, None);
         self.data
             .swapchain_image_views

@@ -115,6 +115,7 @@ pub unsafe fn create_swapchain_image_views(
                     data.swapchain_format,
                     vk::ImageAspectFlags::COLOR,
                     1, /* u32 */
+                    1,
                 )
             }
         })

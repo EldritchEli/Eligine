@@ -41,6 +41,7 @@ pub unsafe fn create_depth_objects(
         data.swapchain_extent.width,
         data.swapchain_extent.height,
         1,
+        1,
         data.msaa_samples,
         format,
         vk::ImageTiling::OPTIMAL,
@@ -58,6 +59,7 @@ pub unsafe fn create_depth_objects(
         data.depth_image,
         format,
         vk::ImageAspectFlags::DEPTH,
+        1,
         1,
     )?;
 

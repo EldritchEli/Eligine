@@ -2,7 +2,7 @@ use crate::game_objects::transform::Transform;
 use crate::vulkan::descriptor_util::{create_pbr_descriptor_sets, create_uniform_buffers};
 use crate::vulkan::image_util::TextureData;
 use crate::vulkan::render_app::AppData;
-use crate::vulkan::uniform_buffer_object::{PbrUniform, UniformBuffer};
+use crate::vulkan::uniform_buffer_object::{GlobalUniform, PbrUniform, UniformBuffer};
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexData, VertexPbr};
 use glam::{Vec4, vec2, vec3};
 use std::collections::HashMap;
@@ -34,7 +34,7 @@ pub trait Renderable {
     fn set_descriptor_sets(&mut self, descriptor_sets: Vec<DescriptorSet>);
     fn get_descriptor_sets(&self) -> &Vec<DescriptorSet>;
     fn get_uniform_buffers(&self) -> &Vec<Buffer>;
-    fn init_descriptor(&self, device: &Device, i: usize);
+    fn init_descriptor(&self, device: &Device, data: &AppData, i: usize);
 }
 impl<V> Renderable for RenderObject<V>
 where
@@ -52,7 +52,20 @@ where
         &self.uniform_buffers
     }
 
-    fn init_descriptor(&self, device: &Device, i: usize) {
+    fn init_descriptor(&self, device: &Device, data: &AppData, i: usize) {
+        let info = vk::DescriptorBufferInfo::builder()
+            .buffer(data.global_buffer[i])
+            .offset(0)
+            .range(size_of::<GlobalUniform>() as u64);
+
+        let buffer_info = &[info];
+        let global_write = vk::WriteDescriptorSet::builder()
+            .dst_set(self.get_descriptor_sets()[i])
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .buffer_info(buffer_info);
+
         let info = vk::DescriptorBufferInfo::builder()
             .buffer(self.get_uniform_buffers()[i])
             .offset(0)
@@ -61,7 +74,7 @@ where
         let buffer_info = &[info];
         let ubo_write = vk::WriteDescriptorSet::builder()
             .dst_set(self.get_descriptor_sets()[i])
-            .dst_binding(0)
+            .dst_binding(1)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(buffer_info);
@@ -74,14 +87,14 @@ where
         let image_info = &[info];
         let sampler_write = vk::WriteDescriptorSet::builder()
             .dst_set(self.get_descriptor_sets()[i])
-            .dst_binding(1)
+            .dst_binding(2)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(image_info);
 
         unsafe {
             device.update_descriptor_sets(
-                &[ubo_write, sampler_write],
+                &[global_write, ubo_write, sampler_write],
                 &[] as &[vk::CopyDescriptorSet],
             )
         };

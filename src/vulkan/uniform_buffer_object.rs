@@ -1,10 +1,13 @@
 use std::ptr::copy_nonoverlapping as memcpy;
 
 use glam::{Mat4, Vec4};
+use vulkanalia::Instance;
 use vulkanalia::{
     Device,
     vk::{self, DeviceMemory, DeviceV1_0},
 };
+
+use crate::vulkan::{descriptor_util::create_uniform_buffers, render_app::AppData};
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -35,9 +38,6 @@ impl UniformBuffer for GlobalUniform {}
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct PbrUniform {
-    pub view: Mat4,
-    pub proj: Mat4,
-    pub inv_view: Mat4,
     pub model: [Mat4; 10],
     pub base: Vec4,
 }
@@ -51,4 +51,27 @@ pub struct GlobalUniform {
     pub x: f32,
     pub y: f32,
     // pub elapsed: Float,
+}
+
+impl GlobalUniform {
+    pub unsafe fn init_buffer(
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+    ) -> anyhow::Result<()> {
+        let mut uniform_buffers = vec![];
+        let mut uniform_buffers_memory = vec![];
+        unsafe {
+            create_uniform_buffers::<GlobalUniform>(
+                instance,
+                device,
+                data,
+                &mut uniform_buffers,
+                &mut uniform_buffers_memory,
+            )?;
+        };
+        data.global_buffer = uniform_buffers;
+        data.global_buffer_memory = uniform_buffers_memory;
+        Ok(())
+    }
 }

@@ -1,5 +1,4 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use crate::game_objects::skybox;
 use crate::gltf;
 use crate::vulkan::command_buffer_util::create_command_buffers;
 use crate::vulkan::command_pool::{create_command_pool, create_transient_command_pool};
@@ -130,6 +129,7 @@ impl App {
         create_command_buffers(&device, &mut scene, &mut data)?;
         create_sync_objects(&device, &mut data)?;
 
+        create_global_buffers(&instance, &device, &mut data)?;
         let app = Self {
             entry,
             instance,
@@ -181,6 +181,8 @@ impl App {
         create_framebuffers(&self.device, &mut self.data)?;
         //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data, 30)?;
+        create_global_buffers(&self.instance, &self.device, &mut self.data)?;
+        create_skybox_descriptor_sets(&self.device, &self.data, &mut self.scene)?;
         for (_, object) in self.scene.render_objects.iter_mut() {
             create_uniform_buffers::<PbrUniform>(
                 &self.instance,
@@ -195,8 +197,6 @@ impl App {
                 object,
             )?;
         }
-        create_global_buffers(&self.instance, &self.device, &mut self.data)?;
-        create_skybox_descriptor_sets(&self.device, &self.data, &mut self.scene)?;
         create_command_buffers(&self.device, &mut self.scene, &mut self.data)?;
         Ok(())
     }
@@ -239,9 +239,6 @@ impl App {
                 model[index] = instance.global_matrix(&self.scene);
             }
             let ubo = PbrUniform {
-                view,
-                proj,
-                inv_view,
                 model,
                 base: object.pbr.base,
             };
@@ -260,7 +257,7 @@ impl App {
             self.device
                 .unmap_memory(object.uniform_buffers_memory[image_index]);
         }
-        if let Some(skybox) = &self.scene.skybox {
+        if let Some(_) = &self.scene.skybox {
             let memory = unsafe {
                 self.device.map_memory(
                     self.data.global_buffer_memory[image_index],

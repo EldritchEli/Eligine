@@ -56,7 +56,7 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                 )
                 .unwrap();
             let building = app.add_object("assets/city_building.glb").unwrap();
-            /*            app.scene.skybox = Some(
+            app.scene.skybox = Some(
                 SkyBox::load(
                     &app.instance,
                     &app.device,
@@ -69,9 +69,9 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                     "assets/skyboxes/pretty_sky/px.png",
                 )
                 .unwrap(),
-            )*/
+            )
 
-            app.scene.skybox = Some(
+            /*app.scene.skybox = Some(
                 SkyBox::load(
                     &app.instance,
                     &app.device,
@@ -84,7 +84,7 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                     "assets/skyboxes/nebula/front.png",
                 )
                 .unwrap(),
-            )
+            )*/
         })
         .unwrap();
     event_loop.run_app(&mut vulkan_data).map_err(OneOf::new)

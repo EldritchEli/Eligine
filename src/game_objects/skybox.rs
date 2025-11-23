@@ -99,19 +99,6 @@ impl SkyBox {
             TextureData::create_cubemap_from_data(instance, device, data, pixels, (x, y))
         }?;
 
-        let mut uniform_buffers = vec![];
-        let mut uniform_buffers_memory = vec![];
-        unsafe {
-            create_uniform_buffers::<GlobalUniform>(
-                instance,
-                device,
-                data,
-                &mut uniform_buffers,
-                &mut uniform_buffers_memory,
-            )?;
-        };
-        data.global_buffer = uniform_buffers;
-        data.global_buffer_memory = uniform_buffers_memory;
         return Ok(Self {
             texture_data,
             descriptors: vec![],

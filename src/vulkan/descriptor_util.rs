@@ -29,19 +29,26 @@ pub unsafe fn skybox_descriptor_set_layout(device: &Device, data: &mut AppData) 
 }
 
 pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
-    let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
+    //global
+    let global = vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::all());
-
-    let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+    //object specific
+    let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
         .binding(1)
+        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_count(1)
+        .stage_flags(vk::ShaderStageFlags::all());
+    //main color texture
+    let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+        .binding(2)
         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-    let bindings = &[ubo_binding, sampler_binding];
+    let bindings = &[global, ubo_binding, sampler_binding];
     let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
     data.descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
     Ok(())
@@ -100,6 +107,8 @@ pub unsafe fn create_global_buffers(
     Ok(())
 }
 
+const GLOBAL_DESCRIPTOR_UNIFORMS: u32 = 30;
+const GLOBAL_SAMPLERS: u32 = 3;
 pub unsafe fn create_descriptor_pool(
     device: &Device,
     data: &mut AppData,
@@ -107,11 +116,13 @@ pub unsafe fn create_descriptor_pool(
 ) -> Result<()> {
     let ubo_size = vk::DescriptorPoolSize::builder()
         .type_(vk::DescriptorType::UNIFORM_BUFFER)
-        .descriptor_count(data.swapchain_images.len() as u32 * max_objects);
+        .descriptor_count(
+            data.swapchain_images.len() as u32 * (max_objects + GLOBAL_DESCRIPTOR_UNIFORMS),
+        );
 
     let sampler_size = vk::DescriptorPoolSize::builder()
         .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-        .descriptor_count(data.swapchain_images.len() as u32 * max_objects);
+        .descriptor_count(data.swapchain_images.len() as u32 * max_objects + GLOBAL_SAMPLERS);
 
     let pool_sizes = &[ubo_size, sampler_size];
     let info = vk::DescriptorPoolCreateInfo::builder()
@@ -142,7 +153,7 @@ where
 
     // Update
     for i in 0..data.swapchain_images.len() {
-        object.init_descriptor(device, i);
+        object.init_descriptor(device, data, i);
     }
 
     Ok(())

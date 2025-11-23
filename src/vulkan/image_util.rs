@@ -530,7 +530,7 @@ unsafe fn copy_buffer_to_image(
             .aspect_mask(vk::ImageAspectFlags::COLOR)
             .mip_level(0)
             .base_array_layer(i)
-            .layer_count(6);
+            .layer_count(depth);
         let region = vk::BufferImageCopy::builder()
             .buffer_offset((width * height * 4 * i) as u64)
             .buffer_row_length(width)

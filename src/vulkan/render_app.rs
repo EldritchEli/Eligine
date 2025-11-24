@@ -3,8 +3,8 @@ use crate::gltf;
 use crate::vulkan::command_buffer_util::create_command_buffers;
 use crate::vulkan::command_pool::{create_command_pool, create_transient_command_pool};
 use crate::vulkan::descriptor_util::{
-    create_descriptor_pool, create_descriptor_set_layout, create_global_buffers,
-    create_pbr_descriptor_sets, create_skybox_descriptor_sets, create_uniform_buffers,
+    create_descriptor_pool, create_global_buffers, create_pbr_descriptor_sets,
+    create_skybox_descriptor_sets, create_uniform_buffers, pbr_descriptor_set_layout,
     skybox_descriptor_set_layout,
 };
 use crate::vulkan::device_util::{create_logical_device, pick_physical_device};
@@ -14,8 +14,8 @@ use crate::vulkan::pipeline_util::{create_pbr_pipeline, skybox_pipeline};
 use crate::vulkan::render_pass_util::create_render_pass;
 use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::vulkan::sync_util::create_sync_objects;
-use crate::vulkan::uniform_buffer_object::{GlobalUniform, PbrUniform, UniformBuffer};
-use crate::vulkan::vertexbuffer_util::{SimpleVertex, Vertex, VertexPbr};
+use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, PbrUniform};
+use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
 use std::f32::consts::PI;
@@ -30,10 +30,10 @@ use vulkanalia::window as vk_window;
 use vulkanalia::{Device, Entry, Instance, vk};
 use winit::window::Window;
 
-use crate::game_objects::render_object::{ObjectId, RenderId};
+use crate::game_objects::render_object::ObjectId;
 use crate::game_objects::scene::Scene;
 use crate::vulkan::color_objects::create_color_objects;
-use glam::{Mat4, Vec4};
+use glam::Mat4;
 use std::ptr::copy_nonoverlapping as memcpy;
 
 /// Our Vulkan app.
@@ -116,7 +116,7 @@ impl App {
         create_swapchain(&window, &instance, &device, &mut data)?;
         create_swapchain_image_views(&device, &mut data)?;
         create_render_pass(&instance, &device, &mut data)?;
-        create_descriptor_set_layout(&device, &mut data)?;
+        pbr_descriptor_set_layout(&device, &mut data)?;
         skybox_descriptor_set_layout(&device, &mut data)?;
         create_pbr_pipeline(&device, &mut data)?;
         skybox_pipeline(&device, &mut data)?;
@@ -129,7 +129,7 @@ impl App {
         create_command_buffers(&device, &mut scene, &mut data)?;
         create_sync_objects(&device, &mut data)?;
 
-        create_global_buffers(&instance, &device, &mut data)?;
+        create_global_buffers(&instance, &device, &mut data, &mut scene)?;
         let app = Self {
             entry,
             instance,
@@ -181,7 +181,12 @@ impl App {
         create_framebuffers(&self.device, &mut self.data)?;
         //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data, 30)?;
-        create_global_buffers(&self.instance, &self.device, &mut self.data)?;
+        create_global_buffers(
+            &self.instance,
+            &self.device,
+            &mut self.data,
+            &mut self.scene,
+        )?;
         create_skybox_descriptor_sets(&self.device, &self.data, &mut self.scene)?;
         for (_, object) in self.scene.render_objects.iter_mut() {
             create_uniform_buffers::<PbrUniform>(
@@ -194,6 +199,7 @@ impl App {
             create_pbr_descriptor_sets::<VertexPbr, PbrUniform>(
                 &self.device,
                 &mut self.data,
+                &mut self.scene.sun,
                 object,
             )?;
         }
@@ -205,7 +211,6 @@ impl App {
         let _time = self.start.elapsed().as_secs_f32();
 
         let view = self.scene.camera.transform.matrix();
-        let inv_view = view.inverse();
 
         let correction = Mat4::from_cols_array(&[
             1.0,
@@ -277,6 +282,18 @@ impl App {
             self.device
                 .unmap_memory(self.data.global_buffer_memory[image_index]);
         }
+        let memory = unsafe {
+            self.device.map_memory(
+                self.scene.sun.memory[image_index],
+                0,
+                size_of::<OrthographicLight>() as u64,
+                vk::MemoryMapFlags::empty(),
+            )
+        }?;
+        memcpy(&self.scene.sun, memory.cast(), 1);
+
+        self.device.unmap_memory(self.scene.sun.memory[image_index]);
+
         Ok(())
     }
 
@@ -444,7 +461,16 @@ impl App {
             .global_buffer_memory
             .iter()
             .for_each(|m| self.device.free_memory(*m, None));
-
+        self.scene
+            .sun
+            .buffer
+            .iter()
+            .for_each(|b| self.device.destroy_buffer(*b, None));
+        self.scene
+            .sun
+            .memory
+            .iter()
+            .for_each(|m| self.device.free_memory(*m, None));
         /*self.data
             .uniform_buffers
             .iter()

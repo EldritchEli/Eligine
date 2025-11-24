@@ -281,15 +281,15 @@ pub trait Vertex {
 #[derive(Copy, Clone, Debug)]
 pub struct VertexPbr {
     pub pos: Vec3,
-    pub color: Vec3,
+    pub normal: Vec3,
     pub tex_coord: Vec2,
 }
 
 impl VertexPbr {
-    pub const fn new(pos: Vec3, color: Vec3, tex_coord: Vec2) -> Self {
+    pub const fn new(pos: Vec3, normal: Vec3, tex_coord: Vec2) -> Self {
         Self {
             pos,
-            color,
+            normal,
             tex_coord,
         }
     }
@@ -302,7 +302,7 @@ impl Vertex for VertexPbr {
             .format(vk::Format::R32G32B32_SFLOAT)
             .offset(0)
             .build();
-        let color = vk::VertexInputAttributeDescription::builder()
+        let normal = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(1)
             .format(vk::Format::R32G32B32_SFLOAT)
@@ -314,7 +314,7 @@ impl Vertex for VertexPbr {
             .format(vk::Format::R32G32_SFLOAT)
             .offset((size_of::<Vec3>() + size_of::<Vec3>()) as u32)
             .build();
-        vec![pos, color, tex_coord]
+        vec![pos, normal, tex_coord]
     }
 }
 
@@ -336,24 +336,3 @@ impl Vertex for SimpleVertex {
         ]
     }
 }
-
-/*impl PartialEq for VertexPbr {
-    fn eq(&self, other: &Self) -> bool {
-        self.pos == other.pos && self.color == other.color && self.tex_coord == other.tex_coord
-    }
-}
-
-impl Eq for VertexPbr {}
-*/
-/*impl Hash for VertexPbr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.pos[0].to_bits().hash(state);
-        self.pos[1].to_bits().hash(state);
-        self.pos[2].to_bits().hash(state);
-        self.color[0].to_bits().hash(state);
-        self.color[1].to_bits().hash(state);
-        self.color[2].to_bits().hash(state);
-        self.tex_coord[0].to_bits().hash(state);
-        self.tex_coord[1].to_bits().hash(state);
-    }
-}*/

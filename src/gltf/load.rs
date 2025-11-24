@@ -157,6 +157,7 @@ fn load_node(
                     data,
                     vertex_data,
                     PBR { texture_data, base },
+                    &mut scene.sun,
                 )
             }
             .map_err(OneOf::broaden)?;
@@ -236,17 +237,12 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
         positions.len() % 12 == 0,
         "positions must be divisible by 12"
     );
-    let coords = map.get(&Semantic::TexCoords(0));
-    let coord_flag = coords.is_some();
-    let colors = map.get(&Semantic::Colors(0));
-    let color_flag = colors.is_some();
     let positions: &[Vec3] = unsafe { std::mem::transmute(positions) };
 
-    let colors: &[Vec3] = if color_flag {
-        unsafe { std::mem::transmute(*colors.unwrap()) }
-    } else {
-        &[]
-    };
+    let normals = *map.get(&Semantic::Normals).unwrap();
+    let normals: &[Vec3] = unsafe { std::mem::transmute(normals) };
+    let coords = map.get(&Semantic::TexCoords(0));
+    let coord_flag = coords.is_some();
     let coords: &[Vec2] = if coord_flag {
         let coords = *coords.unwrap();
         assert!(coords.len() % 8 == 0, "coords must be divisible by 8");
@@ -269,10 +265,10 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
     for i in 0..positions.len() / 12 {
         let pos = positions[i];
         let tex_coord = if coord_flag { coords[i] } else { Vec2::ZERO };
-        let color = if color_flag { colors[i] } else { Vec3::ONE };
+        let normal = normals[i];
         vertices.push(VertexPbr {
             pos,
-            color,
+            normal,
             tex_coord,
         });
     }

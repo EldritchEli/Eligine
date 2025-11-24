@@ -4,6 +4,7 @@ use VulcanEngine_0::{
     game_objects::{skybox::SkyBox, transform::Transform},
     vulkan::renderer::{self, VulkanData},
 };
+use bevy::color::palettes::tailwind::PINK_600;
 use glam::{Quat, Vec3};
 
 use terrors::OneOf;
@@ -35,15 +36,26 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                         Transform {
                             position: Vec3::new(7.0, -2.0, 6.0),
                             scale: 4.0 * Vec3::ONE,
-                            rotation: Quat::default(),
+                            rotation: Quat::from_rotation_y(-PI / 2.0),
+                        },
+                    )
+                    .unwrap();
+            }
+            let ashtray = app.add_object("assets/living_room/Chair.glb").unwrap();
+            for a in ashtray {
+                app.scene
+                    .transform_object(
+                        a,
+                        Transform {
+                            position: Vec3::ZERO,
+                            scale: 4.0 * Vec3::ONE,
+                            rotation: Quat::from_rotation_y(PI),
                         },
                     )
                     .unwrap();
             }
             let man = app.add_object("assets/LittleMan.glb").unwrap();
             let man = man.iter().next().unwrap();
-            let ashtray = app.add_object("assets/living_room/Chair.glb").unwrap();
-            let ashtray = ashtray.iter().next().unwrap();
 
             app.scene
                 .transform_object(
@@ -55,7 +67,7 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
                     },
                 )
                 .unwrap();
-            let building = app.add_object("assets/city_building.glb").unwrap();
+            //let building = app.add_object("assets/city_building.glb").unwrap();
             app.scene.skybox = Some(
                 SkyBox::load(
                     &app.instance,

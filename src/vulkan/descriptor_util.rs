@@ -1,21 +1,22 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::game_objects::render_object::{RenderObject, Renderable};
-use crate::game_objects::scene::Scene;
+use crate::game_objects::scene::{Scene, Sun};
 use crate::vulkan::buffer_util::create_buffer;
 use crate::vulkan::render_app::AppData;
-use crate::vulkan::uniform_buffer_object::{GlobalUniform, PbrUniform, UniformBuffer};
+use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, UniformBuffer};
 use crate::vulkan::vertexbuffer_util::Vertex;
 use anyhow::Result;
-use anyhow::anyhow;
+use gltf::camera::Orthographic;
 use vulkanalia::vk::{DeviceMemory, DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, Instance, vk};
 pub unsafe fn skybox_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
+    //camera and projection
     let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::all());
-
+    //cubemap
     let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
         .binding(1)
         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -28,27 +29,33 @@ pub unsafe fn skybox_descriptor_set_layout(device: &Device, data: &mut AppData) 
     Ok(())
 }
 
-pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
-    //global
-    let global = vk::DescriptorSetLayoutBinding::builder()
+pub unsafe fn pbr_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
+    //camera and projection
+    let camera = vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::all());
-    //object specific
-    let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
+    //orthographic lightsource
+    let ortho_light = vk::DescriptorSetLayoutBinding::builder()
         .binding(1)
+        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_count(1)
+        .stage_flags(vk::ShaderStageFlags::all());
+    //object specific
+    let object_binding = vk::DescriptorSetLayoutBinding::builder()
+        .binding(2)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::all());
     //main color texture
     let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
-        .binding(2)
+        .binding(3)
         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-    let bindings = &[global, ubo_binding, sampler_binding];
+    let bindings = &[camera, ortho_light, object_binding, sampler_binding];
     let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
     data.descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
     Ok(())
@@ -87,6 +94,7 @@ pub unsafe fn create_global_buffers(
     instance: &Instance,
     device: &Device,
     data: &mut AppData,
+    scene: &mut Scene,
 ) -> Result<()> {
     data.global_buffer.clear();
     data.global_buffer_memory.clear();
@@ -104,10 +112,26 @@ pub unsafe fn create_global_buffers(
         data.global_buffer_memory.push(new_uniform_buffer_memory);
     }
 
+    scene.sun.buffer.clear();
+    scene.sun.memory.clear();
+
+    for _ in 0..data.swapchain_images.len() {
+        let (new_uniform_buffer, new_uniform_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size_of::<OrthographicLight>() as u64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+        scene.sun.buffer.push(new_uniform_buffer);
+        scene.sun.memory.push(new_uniform_buffer_memory);
+    }
+
     Ok(())
 }
 
-const GLOBAL_DESCRIPTOR_UNIFORMS: u32 = 30;
+const GLOBAL_DESCRIPTOR_UNIFORMS: u32 = 60;
 const GLOBAL_SAMPLERS: u32 = 3;
 pub unsafe fn create_descriptor_pool(
     device: &Device,
@@ -136,14 +160,13 @@ pub unsafe fn create_descriptor_pool(
 pub unsafe fn create_pbr_descriptor_sets<V, U>(
     device: &Device,
     data: &mut AppData,
+    sun: &mut Sun,
     object: &mut RenderObject<V>,
 ) -> Result<()>
 where
     V: Vertex,
     U: UniformBuffer,
 {
-    // Allocate
-
     let layouts = vec![data.descriptor_set_layout; data.swapchain_images.len()];
     let info = vk::DescriptorSetAllocateInfo::builder()
         .descriptor_pool(data.descriptor_pool)
@@ -153,7 +176,7 @@ where
 
     // Update
     for i in 0..data.swapchain_images.len() {
-        object.init_descriptor(device, data, i);
+        object.init_descriptor(device, data, sun, i);
     }
 
     Ok(())

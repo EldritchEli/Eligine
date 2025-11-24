@@ -1,9 +1,11 @@
 use crate::game_objects::camera::Camera;
 use crate::game_objects::skybox::SkyBox;
 use crate::vulkan::input_state::InputState;
+use crate::vulkan::uniform_buffer_object::OrthographicLight;
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use glam::{Mat4, Vec3};
 use slab::{IntoIter, Iter, IterMut, Slab};
+use vulkanalia::vk::{self, Buffer};
 
 use std::f32::consts::PI;
 use std::marker::PhantomData;
@@ -35,7 +37,6 @@ impl IsId for ObjectId {
     }
 }
 
-/// Id : Id type, O : ObjectType
 #[derive(Debug)]
 pub struct ParaSlab<Id, O>
 where
@@ -117,6 +118,7 @@ pub struct Scene {
     pub objects: ObjectSlab,
     materials: Vec<Material>,
     pub skybox: Option<SkyBox>,
+    pub sun: Sun,
 }
 impl Scene {
     pub fn update(&mut self, delta: f32, input: &InputState) {
@@ -184,6 +186,14 @@ impl Default for Scene {
             objects: ParaSlab::new(),
             materials: Vec::default(),
             skybox: None,
+            sun: Sun::default(),
         }
     }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Sun {
+    pub omnidirectional_light: OrthographicLight,
+    pub buffer: Vec<vk::Buffer>,
+    pub memory: Vec<vk::DeviceMemory>,
 }

@@ -1,6 +1,7 @@
 use std::ptr::copy_nonoverlapping as memcpy;
 
-use glam::{Mat4, Vec4};
+use bevy::math::Vec3;
+use glam::{Mat4, Vec4, vec4};
 use vulkanalia::Instance;
 use vulkanalia::{
     Device,
@@ -34,12 +35,35 @@ pub trait UniformBuffer: Sized {
 }
 impl UniformBuffer for PbrUniform {}
 impl UniformBuffer for GlobalUniform {}
-
+impl UniformBuffer for PointLight {}
+impl UniformBuffer for OrthographicLight {}
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct PbrUniform {
     pub model: [Mat4; 10],
     pub base: Vec4,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct PointLight {
+    pub model: Mat4,
+    pub color: Vec4,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct OrthographicLight {
+    pub direction: Vec4,
+    pub color: Vec4,
+}
+impl Default for OrthographicLight {
+    fn default() -> Self {
+        Self {
+            direction: vec4(-3.0, 1.0, -1.0, 0.0).normalize(),
+            color: Vec4::ONE,
+        }
+    }
 }
 
 #[repr(C)]

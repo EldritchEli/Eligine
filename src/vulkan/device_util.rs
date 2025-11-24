@@ -9,7 +9,7 @@ use log::{info, warn};
 use std::collections::HashSet;
 
 use thiserror::Error;
-use vulkanalia::vk::{DeviceV1_0, DeviceV1_4, HasBuilder, InstanceV1_0, InstanceV1_4};
+use vulkanalia::vk::{DeviceV1_0, HasBuilder, InstanceV1_0};
 use vulkanalia::{Device, Entry, Instance, vk};
 
 #[derive(Debug, Error)]

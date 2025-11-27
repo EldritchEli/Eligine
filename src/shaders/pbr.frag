@@ -8,9 +8,10 @@ layout(binding = 0) uniform Sun {
 layout (binding = 1) uniform Global {
     mat4 view;
     mat4 proj;
-    int x;
-    int y;
+    float x;
+    float y;
 } global_ubo;
+
 layout(binding = 2) uniform UniformBufferObject {
     mat4 model[10];
     vec4 base;
@@ -35,8 +36,10 @@ void main() {
     float spec = pow(max(dot(normal, halfwayDir), 0.0), 10.0);
     vec3 specular = sun.color.xyz * spec;
     vec4 color = ubo.base*texture(texSampler, fragTexCoord);
-    color *= clamp(dot(normal,sun.dir.xyz),0.0,1.0);
+    float lambertian = pow((dot(normal,sun.dir.xyz)*0.5 +0.5),2.0);
+    color *= lambertian;
     color += vec4(specular,0.0);
     outColor = color;
-   // outColor = vec4(1000.0);
+    //outColor = vec4(global_ubo.x,global_ubo.y,0.0,1.0);
+   //outColor = vec4(1000.0);
 }

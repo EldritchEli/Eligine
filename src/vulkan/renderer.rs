@@ -5,19 +5,20 @@
     clippy::unnecessary_wraps,
     unsafe_op_in_unsafe_fn
 )]
+use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::render_app::App;
+use anyhow::anyhow;
 
 //use egui_winit_vulkano::{Gui, GuiConfig};
 use log::error;
 use vulkanalia::prelude::v1_0::*;
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 
 use winit::event_loop::ActiveEventLoop;
+use winit::window::Window;
 use winit::window::WindowId;
-use winit::window::{Window, WindowAttributes};
 
 pub enum AppState {
     Uninitialized { init: fn(&mut App) },
@@ -32,27 +33,28 @@ impl AppState {
         }
     }
 
-    pub fn set_window(&mut self, window: Window) {
-        match self {
-            AppState::Uninitialized { .. } => (),
-            AppState::Initialized { app } => app.window = window,
-        }
-    }
-    pub fn request_redraw(&mut self) {
+    /*   pub fn set_window(&mut self, window: Window) {
+    match self {
+        AppState::Uninitialized { .. } => (),
+        AppState::Initialized { app } => self.window = window,
+    }*/
+
+    /*  pub fn request_redraw(&mut self) {
         match self {
             AppState::Uninitialized { .. } => todo!(),
             AppState::Initialized { app } => app.window.request_redraw(),
         }
-    }
+    }*/
 }
 pub struct VulkanData {
     pub input_state: InputState,
+    pub gui: Option<Gui>,
+    pub window: Option<Window>,
     pub window_minimized: bool,
     pub window_name: String,
     pub time_stamp: f32,
     pub render_stamp: f32,
     pub app: AppState,
-    //pub gui: Option<Gui>,
 }
 impl VulkanData {
     pub fn set_init(&mut self, init: fn(&mut App)) -> Result<(), String> {
@@ -63,15 +65,34 @@ impl VulkanData {
         Ok(())
     }
 
-    pub fn run_init(&mut self, window: Window) -> Result<(), String> {
+    pub fn run_init(
+        &mut self,
+        window: Window,
+        event_loop: &ActiveEventLoop,
+        gui_ctx: Option<egui::Context>,
+    ) -> anyhow::Result<()> {
         match &self.app {
-            AppState::Initialized { app } => Err("already initialized".to_string()),
+            AppState::Initialized { app } => Err(anyhow!("already initialized".to_string())),
             AppState::Uninitialized { init } => {
-                let mut app = unsafe { App::create(window).unwrap() };
-
+                let mut app = unsafe { App::create(&window).unwrap() };
                 init(&mut app);
+                if let Some(ctx) = gui_ctx {
+                    let pixels_per_point = ctx.pixels_per_point();
+                    let mut gui = Gui::init(&app.device, &mut app.data, event_loop, ctx, &window)?;
+                    let output = gui.run_egui_fst(&window);
 
+                    gui.update_gui_mesh(
+                        &app.instance,
+                        &app.device,
+                        &mut app.data,
+                        &output,
+                        pixels_per_point,
+                    )?;
+                    gui.update_gui_images(&app.instance, &app.device, &mut app.data, output)?;
+                    self.gui = Some(gui);
+                }
                 self.app = AppState::Initialized { app: app };
+                self.window = Some(window);
                 Ok(())
             }
         }
@@ -87,6 +108,8 @@ impl Default for VulkanData {
             time_stamp: 0.0,
             render_stamp: 0.0,
             app: AppState::Uninitialized { init: |app| {} },
+            gui: None,
+            window: None,
             //gui: None,
         }
     }
@@ -94,15 +117,13 @@ impl Default for VulkanData {
 
 impl ApplicationHandler for VulkanData {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let attr = WindowAttributes::default()
-            .with_title("Eligine")
-            .with_inner_size(LogicalSize::new(1024, 768));
-        let window = event_loop.create_window(attr).unwrap();
+        let (gui_ctx, window) = Gui::get_window_and_ctx(event_loop).unwrap();
         window.request_redraw();
+        //self.window = window;
         if self.app.initialized() {
-            self.app.set_window(window);
+            // self.app.set_window(window);
         } else {
-            if let Err(st) = self.run_init(window) {
+            if let Err(st) = self.run_init(window, event_loop, Some(gui_ctx)) {
                 error!("{:?}", st);
             }
         }
@@ -126,7 +147,10 @@ impl ApplicationHandler for VulkanData {
         let dt = elapsed - self.time_stamp;
 
         self.time_stamp = elapsed;
+        let gui = self.gui.as_mut().unwrap();
+        let output = gui.run_egui(self.window.as_ref().unwrap(), &event);
         self.input_state.read_event(&event);
+
         app.scene.update(dt, &self.input_state);
         match event {
             WindowEvent::Resized(size) => {
@@ -145,7 +169,7 @@ impl ApplicationHandler for VulkanData {
                     app.device.device_wait_idle().unwrap();
                 }
                 unsafe {
-                    app.destroy();
+                    app.destroy(self.gui.as_mut().unwrap());
                 }
             }
             // Destroy our Vulkan app.
@@ -153,14 +177,14 @@ impl ApplicationHandler for VulkanData {
                 println!("window closed");
 
                 unsafe {
-                    app.destroy();
+                    app.destroy(self.gui.as_mut().unwrap());
                 }
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                app.window.request_redraw();
-                unsafe { app.render() }.unwrap()
-                // }
+                let window = &self.window.as_ref().unwrap();
+                window.request_redraw();
+                unsafe { app.render(window, self.gui.as_mut().unwrap()) }.unwrap()
             }
             _ =>
                 /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */

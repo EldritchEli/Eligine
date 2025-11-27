@@ -5,7 +5,7 @@ use crate::vulkan::uniform_buffer_object::OrthographicLight;
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use glam::{Mat4, Vec3};
 use slab::{IntoIter, Iter, IterMut, Slab};
-use vulkanalia::vk::{self, Buffer};
+use vulkanalia::vk::{self};
 
 use std::f32::consts::PI;
 use std::marker::PhantomData;

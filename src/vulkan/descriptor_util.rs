@@ -1,12 +1,16 @@
 #![allow(unsafe_op_in_unsafe_fn)]
+use std::collections::HashMap;
+
 use crate::game_objects::render_object::{RenderObject, Renderable};
 use crate::game_objects::scene::{Scene, Sun};
+use crate::gui::gui::{Gui, GuiRenderObject};
 use crate::vulkan::buffer_util::create_buffer;
+use crate::vulkan::image_util::TextureData;
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, UniformBuffer};
 use crate::vulkan::vertexbuffer_util::Vertex;
 use anyhow::Result;
-use gltf::camera::Orthographic;
+use egui::TextureId;
 use vulkanalia::vk::{DeviceMemory, DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, Instance, vk};
 pub unsafe fn skybox_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
@@ -26,6 +30,25 @@ pub unsafe fn skybox_descriptor_set_layout(device: &Device, data: &mut AppData) 
     let bindings = &[ubo_binding, sampler_binding];
     let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
     data.skybox_descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
+    Ok(())
+}
+
+pub unsafe fn gui_descriptor_set_layout(device: &Device, data: &mut AppData) -> Result<()> {
+    let dims = vk::DescriptorSetLayoutBinding::builder()
+        .binding(0)
+        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_count(1)
+        .stage_flags(vk::ShaderStageFlags::all());
+
+    let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+        .binding(1)
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(1)
+        .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+    let bindings = &[dims, sampler_binding];
+    let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
+    data.gui_descriptor_layout = device.create_descriptor_set_layout(&info, None)?;
     Ok(())
 }
 
@@ -58,6 +81,7 @@ pub unsafe fn pbr_descriptor_set_layout(device: &Device, data: &mut AppData) -> 
     let bindings = &[camera, ortho_light, object_binding, sampler_binding];
     let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
     data.descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
+
     Ok(())
 }
 
@@ -188,6 +212,7 @@ pub unsafe fn create_skybox_descriptor_sets(
     scene: &mut Scene,
 ) -> Result<()> {
     let layouts = vec![data.skybox_descriptor_set_layout; data.swapchain_images.len()];
+
     let info = vk::DescriptorSetAllocateInfo::builder()
         .descriptor_pool(data.descriptor_pool)
         .set_layouts(&layouts);
@@ -197,6 +222,57 @@ pub unsafe fn create_skybox_descriptor_sets(
     skybox.descriptors = device.allocate_descriptor_sets(&info)?;
     for i in 0..data.swapchain_images.len() {
         skybox.init_descriptor(device, data, i);
+    }
+    Ok(())
+}
+
+pub unsafe fn create_gui_descriptor_sets(
+    map: &HashMap<TextureId, TextureData>,
+    device: &Device,
+    data: &AppData,
+    gui_object: &mut GuiRenderObject,
+) -> Result<()> {
+    println!("gui descriptor");
+    let layouts = vec![data.gui_descriptor_layout; data.swapchain_images.len()];
+    let info = vk::DescriptorSetAllocateInfo::builder()
+        .descriptor_pool(data.descriptor_pool)
+        .set_layouts(&layouts);
+
+    gui_object.descriptor_sets = device.allocate_descriptor_sets(&info)?;
+    for i in 0..data.swapchain_images.len() {
+        let info = vk::DescriptorBufferInfo::builder()
+            .buffer(data.global_buffer[i])
+            .offset(0)
+            .range(size_of::<GlobalUniform>() as u64);
+
+        let buffer_info = &[info];
+        let ubo_write = vk::WriteDescriptorSet::builder()
+            .dst_set(gui_object.descriptor_sets[i])
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .buffer_info(buffer_info);
+        let image_data = map.get(&gui_object.id).unwrap();
+
+        let info = vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(image_data.image_view)
+            .sampler(image_data.sampler);
+
+        let image_info = &[info];
+        let sampler_write = vk::WriteDescriptorSet::builder()
+            .dst_set(gui_object.descriptor_sets[i])
+            .dst_binding(1)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(image_info);
+
+        unsafe {
+            device.update_descriptor_sets(
+                &[ubo_write, sampler_write],
+                &[] as &[vk::CopyDescriptorSet],
+            )
+        };
     }
     Ok(())
 }

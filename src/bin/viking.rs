@@ -2,9 +2,8 @@ use std::f32::consts::PI;
 
 use VulcanEngine_0::{
     game_objects::{skybox::SkyBox, transform::Transform},
-    vulkan::renderer::{self, VulkanData},
+    vulkan::renderer::VulkanData,
 };
-use bevy::color::palettes::tailwind::PINK_600;
 use glam::{Quat, Vec3};
 
 use terrors::OneOf;
@@ -21,7 +20,7 @@ fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode
 
     vulkan_data
         .set_init(|app| {
-            let paths = [
+            let _paths = [
                 //"assets/bird_orange.glb",
                 //"assets/living_room/Rubiks Cube.glb",
                 "assets/LittleMan.glb",

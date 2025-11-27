@@ -4,5 +4,4 @@ use vulkanalia::vk::{DescriptorSet, PipelineLayout};
 pub struct Material {
     descriptor_set: Vec<DescriptorSet>,
     pipeline_layout: PipelineLayout,
-    
 }

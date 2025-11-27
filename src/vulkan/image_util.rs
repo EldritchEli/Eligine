@@ -50,6 +50,17 @@ impl TextureData {
             Self::create_texture_image(instance, device, data, pixels, (size.0, size.1, 1))?;
         Self::create_texture(device, data, mip_levels, image, image_memory, 1)
     }
+    pub unsafe fn create_gui_texture(
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        pixels: Vec<u8>,
+        size: (u32, u32),
+    ) -> Result<TextureData> {
+        let (_mip_levels, image, image_memory) =
+            Self::create_texture_image(instance, device, data, pixels, (size.0, size.1, 1))?;
+        Self::create_texture(device, data, 1, image, image_memory, 1)
+    }
     pub unsafe fn create_cubemap_from_data(
         instance: &Instance,
         device: &Device,
@@ -352,7 +363,7 @@ impl TextureData {
         image: vk::Image,
         mip_levels: u32,
         device: &&Device,
-        data: &mut AppData,
+        _data: &mut AppData,
     ) -> Result<vk::ImageView> {
         let subresource_range = vk::ImageSubresourceRange::builder()
             .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -396,7 +407,7 @@ pub unsafe fn create_image(
     data: &AppData,
     width: u32,
     height: u32,
-    depth: u32,
+    _depth: u32,
     mip_levels: u32,
     samples: vk::SampleCountFlags,
     format: vk::Format,

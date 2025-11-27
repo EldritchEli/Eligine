@@ -6,10 +6,7 @@ use vulkanalia::{
 };
 
 use crate::vulkan::{
-    descriptor_util::create_uniform_buffers,
-    image_util::TextureData,
-    render_app::AppData,
-    uniform_buffer_object::{self, GlobalUniform},
+    image_util::TextureData, render_app::AppData, uniform_buffer_object::GlobalUniform,
 };
 
 impl SkyBox {

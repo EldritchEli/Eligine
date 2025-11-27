@@ -4,8 +4,7 @@ use std::mem::size_of;
 
 use crate::vulkan::buffer_util::{copy_buffer, create_buffer};
 use crate::vulkan::render_app::AppData;
-use glam::{Vec2, Vec3, vec3};
-use std::hash::{Hash, Hasher};
+use glam::{U8Vec4, Vec2, Vec3, Vec4, vec3};
 use std::ptr::copy_nonoverlapping as memcpy;
 use varlen_macro::define_varlen;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
@@ -96,7 +95,7 @@ where
         data: &mut AppData,
         vertices: &Vec<V>,
     ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let size = (size_of::<VertexPbr>() * vertices.len()/*VERTICES.len()*/) as u64;
+        let size = (size_of::<V>() * vertices.len()/*VERTICES.len()*/) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -283,6 +282,38 @@ pub struct VertexPbr {
     pub pos: Vec3,
     pub normal: Vec3,
     pub tex_coord: Vec2,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct VertexGui {
+    pub pos: Vec2,
+    pub uv: Vec2,
+    pub color: Vec4,
+}
+impl Vertex for VertexGui {
+    fn attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
+        let pos = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(0)
+            .format(vk::Format::R32G32_SFLOAT)
+            .offset(0)
+            .build();
+        let tex_coord = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(1)
+            .format(vk::Format::R32G32_SFLOAT)
+            .offset(size_of::<Vec2>() as u32)
+            .build();
+
+        let color = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(2)
+            .format(vk::Format::R32G32B32A32_SFLOAT)
+            .offset((size_of::<Vec2>() * 2) as u32)
+            .build();
+        vec![pos, tex_coord, color]
+    }
 }
 
 impl VertexPbr {

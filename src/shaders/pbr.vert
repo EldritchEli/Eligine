@@ -2,8 +2,8 @@
 layout (binding = 1) uniform Global {
     mat4 view;
     mat4 proj;
-    float x;
-    float y;
+    int x;
+    int y;
 } global_ubo;
 
 layout(binding = 2) uniform UniformBufferObject {

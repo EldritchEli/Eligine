@@ -266,11 +266,11 @@ pub fn test_mesh1() -> MeshData{ MeshData {
     })
 }
 }*/
-pub trait Vertex {
+pub trait Vertex: Sized {
     fn binding_description() -> vk::VertexInputBindingDescription {
         vk::VertexInputBindingDescription::builder()
             .binding(0)
-            .stride(size_of::<VertexPbr>() as u32)
+            .stride(size_of::<Self>() as u32)
             .input_rate(vk::VertexInputRate::VERTEX)
             .build()
     }
@@ -289,7 +289,7 @@ pub struct VertexPbr {
 pub struct VertexGui {
     pub pos: Vec2,
     pub uv: Vec2,
-    pub color: Vec4,
+    pub color: U8Vec4,
 }
 impl Vertex for VertexGui {
     fn attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
@@ -309,7 +309,7 @@ impl Vertex for VertexGui {
         let color = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(2)
-            .format(vk::Format::R32G32B32A32_SFLOAT)
+            .format(vk::Format::R8G8B8A8_UNORM)
             .offset((size_of::<Vec2>() * 2) as u32)
             .build();
         vec![pos, tex_coord, color]

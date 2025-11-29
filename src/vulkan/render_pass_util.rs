@@ -27,7 +27,7 @@ pub unsafe fn create_render_pass(
         .format(unsafe { get_depth_format(instance, data) }?)
         .samples(data.msaa_samples)
         .load_op(vk::AttachmentLoadOp::CLEAR)
-        .store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .store_op(vk::AttachmentStoreOp::STORE)
         .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
         .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
@@ -146,11 +146,12 @@ pub unsafe fn create_render_pass(
 
 pub fn skybox_subpass<'a>(
     color: &'a [AttachmentReferenceBuilder],
-    _depth: &'a AttachmentReferenceBuilder,
+    depth: &'a AttachmentReferenceBuilder,
     resolve: &'a [AttachmentReferenceBuilder],
 ) -> SubpassDescriptionBuilder<'a> {
     let subpass = vk::SubpassDescription::builder()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        .depth_stencil_attachment(depth)
         .color_attachments(color)
         .resolve_attachments(resolve);
     subpass

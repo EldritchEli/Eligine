@@ -13,11 +13,20 @@ layout(location = 0) in vec2 fragCoord;
 layout(location = 1) in vec4 fragColor;
 
 
+const float GAMMA = 2.2;
+const float INV_GAMMA = 1.0 / GAMMA;
+
+vec3 LINEARtoSRGB(vec3 color) {
+    return pow(color, vec3(INV_GAMMA));
+}
+vec4 LINEARtoSRGB(vec4 color) {
+    return vec4(LINEARtoSRGB(color.rgb), color.a);
+}
 void main() {
 	// If your skybox is a cubemap
     outColor =  texture(texSampler,fragCoord);
-    outColor += fragColor;
-   //outColor = vec4(ubo.x,ubo.y,0.0,1.0);
+    outColor *= fragColor;
+    //outColor = vec4(outColor.w);
 }
 
 

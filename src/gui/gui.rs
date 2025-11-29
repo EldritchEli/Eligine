@@ -1,8 +1,9 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use std::collections::HashMap;
 
-use egui::{FullOutput, TextureId};
-use glam::{Vec2, Vec4};
+use bevy::color::palettes::tailwind::RED_100;
+use egui::{Color32, FullOutput, Rect, RichText, TextureId};
+use glam::{U8Vec4, Vec2, Vec4};
 use vulkanalia::{
     Device, Instance,
     vk::{self, DeviceV1_0},
@@ -19,6 +20,7 @@ use crate::vulkan::{
 pub struct GuiRenderObject {
     pub vertex_data: VertexData<VertexGui>,
     pub id: TextureId,
+    pub rect: Rect,
     pub descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
@@ -82,7 +84,6 @@ impl Gui {
         event: &winit::event::WindowEvent,
     ) -> FullOutput {
         // Each frame:
-
         let _response = self.egui_state.on_window_event(window, event);
         let input = self.egui_state.take_egui_input(window);
 
@@ -108,16 +109,25 @@ impl Gui {
         let input = egui::RawInput::default();
 
         self.egui_state.egui_ctx().begin_pass(input);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show(self.egui_state.egui_ctx(), |ui| {
+                ui.label(
+                    RichText::new("Hello egui! IM home you dummy, and so it goes lalalalla")
+                        .color(egui::Color32::RED)
+                        .size(28.0),
+                );
 
-        egui::CentralPanel::default().show(self.egui_state.egui_ctx(), |ui| {
-            ui.label("Hello egui! IM home you dummy, and so it goes lalalalla");
-            if ui.button("atoms").clicked() {
-                println!("hello world");
-            };
-            if ui.button("battypatpat").clicked() {
-                println!("goodbye");
-            };
-        });
+                if ui
+                    .add(egui::Button::new("Click me").fill(Color32::YELLOW))
+                    .clicked()
+                {
+                    println!("hello world");
+                };
+                if ui.button("battypatpat").clicked() {
+                    println!("goodbye");
+                };
+            });
 
         self.egui_state.egui_ctx().end_pass()
 
@@ -181,21 +191,22 @@ impl Gui {
         output: &FullOutput,
         pixels_per_point: f32,
     ) -> anyhow::Result<()> {
-        let texture_id: Vec<TextureId> = output
+        let texture_id: Vec<(TextureId, Rect)> = output
             .clone()
             .shapes
             .iter()
-            .map(|s| s.shape.texture_id())
+            .map(|s| (s.shape.texture_id(), s.clip_rect))
             .collect();
+
         let primitives = self
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
         let mut vertices = vec![];
-        for (prim, id) in primitives.iter().zip(texture_id) {
+        for (prim, (id, rect)) in primitives.iter().zip(texture_id) {
             let vertex_data: VertexData<VertexGui> = match &prim.primitive {
                 epaint::Primitive::Mesh(mesh) => {
-                    let vertices = mesh
+                    let vertices: Vec<VertexGui> = mesh
                         .vertices
                         .iter()
                         .map(|v| VertexGui {
@@ -204,14 +215,13 @@ impl Gui {
                                 y: v.pos.y,
                             },
                             uv: Vec2::new(v.uv.x, v.uv.y),
-                            color: Vec4::new(
-                                (v.color.r() / 255) as f32,
-                                (v.color.g() / 255) as f32,
-                                (v.color.b() / 255) as f32,
-                                (v.color.a() / 255) as f32,
-                            ),
+                            color: U8Vec4::new(v.color.r(), v.color.g(), v.color.b(), v.color.a()),
                         })
                         .collect();
+                    //let mut indices: Vec<u32> = vec![];
+                    /*  for i in 0..vertices.len() * 3 {
+                        indices.push(0);
+                    }*/
                     unsafe {
                         VertexData::create_vertex_data(
                             instance,
@@ -227,6 +237,7 @@ impl Gui {
             vertices.push(GuiRenderObject {
                 vertex_data,
                 id,
+                rect,
                 descriptor_sets: vec![],
             });
         }
@@ -234,9 +245,4 @@ impl Gui {
 
         Ok(())
     }
-
-    // Returns the pixels per point of the window of this gui.
-    /* fn pixels_per_point(&self, window: &winit::window::Window) -> f32 {
-        egui_winit::pixels_per_point(&self.egui_state.egui_ctx(), &window)
-    }*/
 }

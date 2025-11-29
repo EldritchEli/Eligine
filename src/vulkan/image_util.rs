@@ -57,9 +57,9 @@ impl TextureData {
         pixels: Vec<u8>,
         size: (u32, u32),
     ) -> Result<TextureData> {
-        let (_mip_levels, image, image_memory) =
+        let (mip_levels, image, image_memory) =
             Self::create_texture_image(instance, device, data, pixels, (size.0, size.1, 1))?;
-        Self::create_texture(device, data, 1, image, image_memory, 1)
+        Self::create_texture(device, data, mip_levels, image, image_memory, 1)
     }
     pub unsafe fn create_cubemap_from_data(
         instance: &Instance,

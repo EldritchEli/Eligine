@@ -234,7 +234,7 @@ pub unsafe fn skybox_pipeline(
 
     let attachment = vk::PipelineColorBlendAttachmentState::builder()
         .color_write_mask(vk::ColorComponentFlags::all())
-        .blend_enable(false)
+        .blend_enable(true)
         .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
         .color_blend_op(vk::BlendOp::ADD)
@@ -321,63 +321,67 @@ pub unsafe fn gui_pipeline(
         .min_depth(0.0)
         .max_depth(1.0);
 
-    let scissor = vk::Rect2D::builder()
-        .offset(vk::Offset2D { x: 0, y: 0 })
-        .extent(data.swapchain_extent);
+    //let scissor = vk::Rect2D::builder()
+    //  .offset(vk::Offset2D { x: 0, y: 0 })
+    //    .extent(data.swapchain_extent);
 
     let viewports = &[viewport];
-    let scissors = &[scissor];
+    //let scissors = &[scissor];
     let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
         .viewports(viewports)
-        .scissors(scissors);
+        .scissor_count(1);
 
     let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
         .depth_clamp_enable(false)
         .rasterizer_discard_enable(false)
         .line_width(1.0)
         .polygon_mode(vk::PolygonMode::FILL)
-        .cull_mode(vk::CullModeFlags::FRONT)
+        .cull_mode(vk::CullModeFlags::NONE)
         .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
         .depth_bias_enable(false);
 
-    let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
-        // Enable sample shading in the pipeline.
-        .sample_shading_enable(true)
-        // Minimum fraction for sample shading; closer to one is smoother.
-        .min_sample_shading(1.0)
-        .rasterization_samples(data.msaa_samples);
+    let multisample_state =
+        vk::PipelineMultisampleStateCreateInfo::builder().rasterization_samples(data.msaa_samples);
+    let stencil_op = vk::StencilOpState::builder()
+        .fail_op(vk::StencilOp::KEEP)
+        .pass_op(vk::StencilOp::KEEP)
+        .compare_op(vk::CompareOp::ALWAYS)
+        .build();
 
     let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::builder()
         .depth_test_enable(true)
         .depth_write_enable(true)
-        .depth_compare_op(vk::CompareOp::LESS)
+        .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
         .depth_bounds_test_enable(false)
         .min_depth_bounds(0.0) // Optional.
         .max_depth_bounds(1.0) // Optional.
-        .stencil_test_enable(false);
-    //.front(/* vk::StencilOpState */) // Optional.
-    //  .back(/* vk::StencilOpState */); // Optional.
+        .stencil_test_enable(false)
+        .front(stencil_op) // Optional.
+        .back(stencil_op); // Optional.
 
-    let attachment = vk::PipelineColorBlendAttachmentState::builder()
-        .color_write_mask(vk::ColorComponentFlags::all())
-        .blend_enable(false)
-        .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+    let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
+        .color_write_mask(
+            vk::ColorComponentFlags::R
+                | vk::ColorComponentFlags::G
+                | vk::ColorComponentFlags::B
+                | vk::ColorComponentFlags::A,
+        )
+        .blend_enable(true)
+        .src_color_blend_factor(vk::BlendFactor::ONE)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
-        .color_blend_op(vk::BlendOp::ADD)
-        .src_alpha_blend_factor(vk::BlendFactor::ONE)
-        .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-        .alpha_blend_op(vk::BlendOp::ADD);
+        .build()];
 
-    let attachments = &[attachment];
     let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
-        .logic_op_enable(false)
-        .logic_op(vk::LogicOp::COPY)
-        .attachments(attachments)
-        .blend_constants([0.0, 0.0, 0.0, 0.0]);
+        .attachments(&color_blend_attachments)
+        .build();
 
-    let dynamic_states = &[vk::DynamicState::VIEWPORT, vk::DynamicState::LINE_WIDTH];
+    let dynamic_states = &[
+        // vk::DynamicState::VIEWPORT,
+        //vk::DynamicState::LINE_WIDTH,
+        vk::DynamicState::SCISSOR,
+    ];
 
-    let _dynamic_state =
+    let dynamic_state =
         vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(dynamic_states);
 
     let set_layouts = &[data.gui_descriptor_layout];
@@ -385,8 +389,8 @@ pub unsafe fn gui_pipeline(
     let pipeline_layout = device.create_pipeline_layout(&layout_info, None)?;
 
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
-        .topology(vk::PrimitiveTopology::TRIANGLE_STRIP)
-        .primitive_restart_enable(true)
+        .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+        .primitive_restart_enable(false)
         .build();
     let stages = &[vert_stage, frag_stage];
     let info = vk::GraphicsPipelineCreateInfo::builder()
@@ -399,6 +403,7 @@ pub unsafe fn gui_pipeline(
         .depth_stencil_state(&depth_stencil_state)
         .color_blend_state(&color_blend_state)
         .layout(pipeline_layout)
+        .dynamic_state(&dynamic_state)
         .render_pass(data.render_pass)
         .subpass(subpass_position);
 

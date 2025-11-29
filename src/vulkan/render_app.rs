@@ -133,7 +133,7 @@ impl App {
         create_transient_command_pool(&instance, &device, &mut data)?;
         create_descriptor_pool(&device, &mut data, 30)?;
 
-        create_command_buffers(&device, &mut scene, &mut data, None)?;
+        create_command_buffers(&device, &mut scene, &mut data, window, None)?;
         create_sync_objects(&device, &mut data)?;
 
         create_global_buffers(&instance, &device, &mut data, &mut scene)?;
@@ -220,7 +220,13 @@ impl App {
             create_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, v)?;
         }
 
-        create_command_buffers(&self.device, &mut self.scene, &mut self.data, Some(gui))?;
+        create_command_buffers(
+            &self.device,
+            &mut self.scene,
+            &mut self.data,
+            window,
+            Some(gui),
+        )?;
         Ok(())
     }
 
@@ -292,11 +298,12 @@ impl App {
                     vk::MemoryMapFlags::empty(),
                 )
             }?;
+            let scale = window.scale_factor() as f32;
             let ubo = GlobalUniform {
                 view,
                 proj,
-                x: window.outer_size().width as f32,
-                y: window.outer_size().height as f32,
+                x: window.inner_size().width as f32 / scale,
+                y: window.inner_size().height as f32 / scale,
             };
             memcpy(&ubo, memory.cast(), 1);
 
@@ -332,9 +339,11 @@ impl App {
         //let sem = self.data.image_available_semaphores[self.frame];
 
         let image_index = match result {
-            //Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => return self.recreate_swapchain(),
+            Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
+                return self.recreate_swapchain(window, gui);
+            }
             Ok((image_index, _)) => image_index as usize,
-            //Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(),
+            Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(window, gui),
             Err(e) => return Err(anyhow!(e)),
         };
 

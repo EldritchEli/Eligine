@@ -2,14 +2,19 @@
 use crate::game_objects::scene::Scene;
 use crate::gui::gui::Gui;
 use crate::vulkan::render_app::AppData;
+use bevy::picking::window;
+use egui::Rect;
+use iced::widget::shader::wgpu::vertex_attr_array;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, vk};
+use winit::window::Window;
 
 pub unsafe fn create_command_buffers(
     device: &Device,
     scene: &mut Scene,
     data: &mut AppData,
-    gui: Option<&Gui>,
+    window: &Window,
+    mut gui: Option<&Gui>,
 ) -> anyhow::Result<()> {
     let allocate_info = vk::CommandBufferAllocateInfo::builder()
         .command_pool(data.command_pool)
@@ -78,7 +83,10 @@ pub unsafe fn create_command_buffers(
                 &[],
             );
             //device.cmd_draw(*command_buffer, 4, 1, 0, 0);
-            for object in &gui.as_ref().unwrap().vertex_data {
+
+            let mut vertex_data = gui.as_mut().unwrap().vertex_data.clone();
+            vertex_data.reverse();
+            for object in vertex_data {
                 device.cmd_bind_vertex_buffers(
                     *command_buffer,
                     0,
@@ -99,10 +107,37 @@ pub unsafe fn create_command_buffers(
                     &[object.descriptor_sets[i]],
                     &[],
                 );
-                device.cmd_draw(
+                println!("Rect:  {:?}", object.rect);
+                let Rect { mut min, mut max } = object.rect;
+                let scale = window.scale_factor() as f32;
+                min.x *= scale;
+                min.y *= scale;
+                max.x *= scale;
+                max.y *= scale;
+                device.cmd_set_scissor(
                     *command_buffer,
-                    object.vertex_data.vertices.len() as u32,
+                    0,
+                    &[vk::Rect2D::builder()
+                        .offset(
+                            vk::Offset2D::builder()
+                                .x(min.x.round() as i32)
+                                .y(min.y.round() as i32)
+                                .build(),
+                        )
+                        .extent(
+                            vk::Extent2D::builder()
+                                .width((max.x.round() - min.x) as u32)
+                                .height((max.y.round() - min.y) as u32)
+                                .build(),
+                        )
+                        .build()],
+                );
+
+                device.cmd_draw_indexed(
+                    *command_buffer,
+                    object.vertex_data.indices.len() as u32,
                     1,
+                    0,
                     0,
                     0,
                 );

@@ -61,7 +61,7 @@ where
         .vertex_attribute_descriptions(&attribute_descriptions);
 
     let viewport = vk::Viewport::builder()
-        .x(0.0)
+        .x(190.0)
         .y(0.0)
         .width(data.swapchain_extent.width as f32)
         .height(data.swapchain_extent.height as f32)

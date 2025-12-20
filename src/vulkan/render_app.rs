@@ -302,8 +302,8 @@ impl App {
             let ubo = GlobalUniform {
                 view,
                 proj,
-                x: window.inner_size().width as f32 / scale,
-                y: window.inner_size().height as f32 / scale,
+                x: self.data.swapchain_extent.width as f32,
+                y: self.data.swapchain_extent.height as f32,
             };
             memcpy(&ubo, memory.cast(), 1);
 

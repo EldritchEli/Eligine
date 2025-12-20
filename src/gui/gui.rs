@@ -1,9 +1,8 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use std::collections::HashMap;
 
-use bevy::color::palettes::tailwind::RED_100;
-use egui::{Color32, FullOutput, Rect, RichText, TextureId};
-use glam::{U8Vec4, Vec2, Vec4};
+use egui::{Color32, FullOutput, Rect, RichText, SidePanel, TextureId};
+use glam::{U8Vec4, Vec2};
 use vulkanalia::{
     Device, Instance,
     vk::{self, DeviceV1_0},
@@ -88,17 +87,31 @@ impl Gui {
         let input = self.egui_state.take_egui_input(window);
 
         self.egui_state.egui_ctx().begin_pass(input);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show(self.egui_state.egui_ctx(), |ui| {
+                SidePanel::new(egui::panel::Side::Left, "my panel ")
+                    .default_width(200.0)
+                    .show(self.egui_state.egui_ctx(), |ui| {
+                        ui.label(
+                            RichText::new(
+                                "Hello egui! IM home you dummy, and so it goes lalalalla",
+                            )
+                            .color(egui::Color32::RED)
+                            .size(28.0),
+                        );
 
-        egui::CentralPanel::default().show(self.egui_state.egui_ctx(), |ui| {
-            ui.label("Hello egui! IM home you dummy, and so it goes lalalalla");
-            if ui.button("atoms").clicked() {
-                println!("hello world");
-            };
-            if ui.button("battypatpat").clicked() {
-                println!("goodbye");
-            };
-        });
-
+                        if ui
+                            .add(egui::Button::new("Click me").fill(Color32::YELLOW))
+                            .clicked()
+                        {
+                            println!("hello world");
+                        };
+                        if ui.button("battypatpat").clicked() {
+                            println!("goodbye");
+                        };
+                    });
+            });
         self.egui_state.egui_ctx().end_pass()
 
         // handle full_output
@@ -112,21 +125,27 @@ impl Gui {
         egui::CentralPanel::default()
             .frame(egui::Frame::none())
             .show(self.egui_state.egui_ctx(), |ui| {
-                ui.label(
-                    RichText::new("Hello egui! IM home you dummy, and so it goes lalalalla")
-                        .color(egui::Color32::RED)
-                        .size(28.0),
-                );
+                SidePanel::new(egui::panel::Side::Left, "my panel ")
+                    .default_width(200.0)
+                    .show(self.egui_state.egui_ctx(), |ui| {
+                        ui.label(
+                            RichText::new(
+                                "Hello egui! IM home you dummy, and so it goes lalalalla",
+                            )
+                            .color(egui::Color32::RED)
+                            .size(28.0),
+                        );
 
-                if ui
-                    .add(egui::Button::new("Click me").fill(Color32::YELLOW))
-                    .clicked()
-                {
-                    println!("hello world");
-                };
-                if ui.button("battypatpat").clicked() {
-                    println!("goodbye");
-                };
+                        if ui
+                            .add(egui::Button::new("Click me").fill(Color32::YELLOW))
+                            .clicked()
+                        {
+                            println!("hello world");
+                        };
+                        if ui.button("battypatpat").clicked() {
+                            println!("goodbye");
+                        };
+                    });
             });
 
         self.egui_state.egui_ctx().end_pass()
@@ -153,6 +172,7 @@ impl Gui {
         output: FullOutput,
     ) -> anyhow::Result<()> {
         let image_delta = output.textures_delta;
+
         for (id, delta) in &image_delta.set {
             let texture_data = match &delta.image {
                 egui::ImageData::Color(color_image) => unsafe {

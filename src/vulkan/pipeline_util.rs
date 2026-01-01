@@ -1,40 +1,21 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use crate::gui::gui::Gui;
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::shader_module_util::create_shader_module;
 use crate::vulkan::uniform_buffer_object::PushConstants;
-use crate::vulkan::vertexbuffer_util::{SimpleVertex, Vertex, VertexGui, VertexPbr};
-use uuid::fmt::Simple;
-use vulkanalia::vk::{
-    DeviceV1_0, Handle, HasBuilder, PipelineInputAssemblyStateCreateInfo, PrimitiveTopology,
-};
+use crate::vulkan::vertexbuffer_util::{Vertex, VertexGui, VertexPbr};
+use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
 use vulkanalia::{Device, vk};
 
 pub unsafe fn create_pbr_pipeline(
     device: &Device,
     data: &mut AppData,
+    subpass_order: u32,
 ) -> std::result::Result<(), anyhow::Error> {
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-        .primitive_restart_enable(false)
         .build();
-    let (layout, pipeline) =
-        create_graphics_pipeline::<VertexPbr>(device, data, "pbr", input_assembly_state)?;
-    data.pbr_pipeline_layout = layout;
-    data.pbr_pipeline = pipeline;
-    Ok(())
-}
-pub unsafe fn create_graphics_pipeline<V>(
-    device: &Device,
-    data: &mut AppData,
-    shader_name: &str,
-    input_assembly_state: PipelineInputAssemblyStateCreateInfo,
-) -> anyhow::Result<(vk::PipelineLayout, vk::Pipeline)>
-where
-    V: Vertex,
-{
-    let vert = std::fs::read(format!("src/shaders/{shader_name}_vert.spv"))?;
-    let frag = std::fs::read(format!("src/shaders/{shader_name}_frag.spv"))?;
+    let vert = std::fs::read(std::format!("src/shaders/pbr_vert.spv"))?;
+    let frag = std::fs::read(std::format!("src/shaders/pbr_frag.spv"))?;
 
     let vert_shader_module = create_shader_module(device, &vert[..])?;
     let frag_shader_module = create_shader_module(device, &frag[..])?;
@@ -54,8 +35,8 @@ where
         .module(frag_shader_module)
         .name(b"main\0");
 
-    let binding_descriptions = &[V::binding_description()];
-    let attribute_descriptions = V::attribute_descriptions();
+    let binding_descriptions = &[<VertexPbr>::binding_description()];
+    let attribute_descriptions = <VertexPbr>::attribute_descriptions();
     let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
         .vertex_binding_descriptions(binding_descriptions)
         .vertex_attribute_descriptions(&attribute_descriptions);
@@ -127,7 +108,7 @@ where
     let _dynamic_state =
         vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(dynamic_states);
 
-    let set_layouts = &[data.descriptor_set_layout];
+    let set_layouts = &[data.pbr_descriptor_set_layout];
     let push_ranges = [push_range];
     let mut layout_info = vk::PipelineLayoutCreateInfo::builder()
         .set_layouts(set_layouts)
@@ -147,7 +128,7 @@ where
         .color_blend_state(&color_blend_state)
         .layout(pipeline_layout)
         .render_pass(data.render_pass)
-        .subpass(1);
+        .subpass(subpass_order);
 
     let pipeline = device
         .create_graphics_pipelines(vk::PipelineCache::null(), &[info], None)?
@@ -155,7 +136,9 @@ where
 
     device.destroy_shader_module(vert_shader_module, None);
     device.destroy_shader_module(frag_shader_module, None);
-    Ok((pipeline_layout, pipeline))
+    data.pbr_pipeline_layout = pipeline_layout;
+    data.pbr_pipeline = pipeline;
+    Ok(())
 }
 
 pub unsafe fn skybox_pipeline(
@@ -260,7 +243,7 @@ pub unsafe fn skybox_pipeline(
 
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
         .topology(vk::PrimitiveTopology::TRIANGLE_STRIP)
-        .primitive_restart_enable(false)
+        .primitive_restart_enable(true)
         .build();
     let stages = &[vert_stage, frag_stage];
     let info = vk::GraphicsPipelineCreateInfo::builder()

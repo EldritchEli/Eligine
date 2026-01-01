@@ -11,12 +11,14 @@ use crate::vulkan::device_util::{create_logical_device, pick_physical_device};
 use crate::vulkan::framebuffer_util::{create_depth_objects, create_framebuffers};
 use crate::vulkan::instance_util::create_instance;
 use crate::vulkan::pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline};
-use crate::vulkan::render_pass_util::{create_render_pass, mock_render_pass};
+use crate::vulkan::render_pass_util::create_render_pass;
 use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::vulkan::sync_util::create_sync_objects;
-use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, PbrUniform};
+use crate::vulkan::uniform_buffer_object::{
+    GlobalUniform, OrthographicLight, PbrUniform, UniformBuffer,
+};
 use crate::vulkan::vertexbuffer_util::VertexPbr;
-use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
+use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use crate::{gltf, gui};
 use anyhow::anyhow;
 use std::f32::consts::PI;
@@ -68,7 +70,7 @@ pub struct AppData {
     pub swapchain_image_views: Vec<vk::ImageView>,
 
     pub render_pass: vk::RenderPass,
-    pub descriptor_set_layout: vk::DescriptorSetLayout,
+    pub pbr_descriptor_set_layout: vk::DescriptorSetLayout,
     pub skybox_descriptor_set_layout: vk::DescriptorSetLayout,
     pub pbr_pipeline_layout: vk::PipelineLayout,
     pub pbr_pipeline: vk::Pipeline,
@@ -123,9 +125,9 @@ impl App {
         pbr_descriptor_set_layout(&device, &mut data)?;
         skybox_descriptor_set_layout(&device, &mut data)?;
         gui_descriptor_set_layout(&device, &mut data)?;
-        create_pbr_pipeline(&device, &mut data)?;
+        create_pbr_pipeline(&device, &mut data, 1)?;
         gui_pipeline(&device, &mut data, 0)?;
-        skybox_pipeline(&device, &mut data, 0)?;
+        skybox_pipeline(&device, &mut data, 2)?;
         create_command_pool(&instance, &device, &mut data)?;
         create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
@@ -185,8 +187,8 @@ impl App {
         create_render_pass(&self.instance, &self.device, &mut self.data)?;
         //mock_render_pass(&self.instance, &self.device, &mut self.data)?;
 
-        skybox_pipeline(&self.device, &mut self.data, 0)?;
-        create_pbr_pipeline(&self.device, &mut self.data)?;
+        skybox_pipeline(&self.device, &mut self.data, 2)?;
+        create_pbr_pipeline(&self.device, &mut self.data, 1)?;
         gui_pipeline(&self.device, &mut self.data, 0)?;
 
         create_color_objects(&self.instance, &self.device, &mut self.data)?;
@@ -239,29 +241,10 @@ impl App {
         //let gui = &mut self.gui.as_mut().unwrap();
         let view = self.scene.camera.transform.matrix();
 
-        let correction = Mat4::from_cols_array(&[
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            // We're also flipping the Y-axis with this line's `-1.0`.
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0 / 2.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0 / 2.0,
-            1.0,
-        ]);
         let aspect =
             self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32;
-        let perspective = Mat4::perspective_rh(PI / 4.0, aspect, 0.1, 100.0);
-        let proj = correction * perspective;
+        let perspective = Mat4::perspective_rh(PI / 4.0, aspect, 0.1, FAR_PLANE_DISTANCE);
+        let proj = CORRECTION * perspective;
 
         //let model_rotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time);
         for (_i, object) in self.scene.render_objects.iter() {
@@ -274,41 +257,17 @@ impl App {
                 model,
                 base: object.pbr.base,
             };
-            //ubo.map_memory(&self.device, object.uniform_buffers_memory[image_index])?;
-            let memory = unsafe {
-                self.device.map_memory(
-                    object.uniform_buffers_memory[image_index],
-                    0,
-                    size_of::<PbrUniform>() as u64,
-                    vk::MemoryMapFlags::empty(),
-                )
-            }?;
-
-            memcpy(&ubo, memory.cast(), 1);
-
-            self.device
-                .unmap_memory(object.uniform_buffers_memory[image_index]);
+            ubo.map_memory(&self.device, object.uniform_buffers_memory[image_index])?;
         }
         if let Some(_) = &self.scene.skybox {
-            let memory = unsafe {
-                self.device.map_memory(
-                    self.data.global_buffer_memory[image_index],
-                    0,
-                    size_of::<GlobalUniform>() as u64,
-                    vk::MemoryMapFlags::empty(),
-                )
-            }?;
             let scale = window.scale_factor() as f32;
             let ubo = GlobalUniform {
                 view,
                 proj,
-                x: self.data.swapchain_extent.width as f32,
-                y: self.data.swapchain_extent.height as f32,
+                x: self.data.swapchain_extent.width as f32 / scale,
+                y: self.data.swapchain_extent.height as f32 / scale,
             };
-            memcpy(&ubo, memory.cast(), 1);
-
-            self.device
-                .unmap_memory(self.data.global_buffer_memory[image_index]);
+            ubo.map_memory(&self.device, self.data.global_buffer_memory[image_index])?;
         }
         let memory = unsafe {
             self.device.map_memory(
@@ -318,10 +277,9 @@ impl App {
                 vk::MemoryMapFlags::empty(),
             )
         }?;
-        memcpy(&self.scene.sun, memory.cast(), 1);
+        memcpy(&self.scene.sun.omnidirectional_light, memory.cast(), 1);
 
         self.device.unmap_memory(self.scene.sun.memory[image_index]);
-
         Ok(())
     }
 
@@ -429,7 +387,7 @@ impl App {
         }
 
         self.device
-            .destroy_descriptor_set_layout(self.data.descriptor_set_layout, None);
+            .destroy_descriptor_set_layout(self.data.pbr_descriptor_set_layout, None);
         self.device
             .destroy_descriptor_set_layout(self.data.skybox_descriptor_set_layout, None);
         self.data

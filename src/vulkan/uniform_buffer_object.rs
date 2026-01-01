@@ -22,12 +22,12 @@ pub trait UniformBuffer: Sized {
             device.map_memory(
                 mem,
                 0,
-                size_of::<PbrUniform>() as u64,
+                size_of::<Self>() as u64,
                 vk::MemoryMapFlags::empty(),
             )
         }?;
 
-        unsafe { memcpy(&self, memory.cast(), 1) };
+        unsafe { memcpy(&*self, memory.cast(), 1) };
 
         unsafe { device.unmap_memory(mem) };
         Ok(())

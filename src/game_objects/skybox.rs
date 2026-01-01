@@ -11,7 +11,7 @@ use crate::vulkan::{
 
 impl SkyBox {
     pub fn get_descriptor_sets(&self) -> &Vec<vulkanalia::vk::DescriptorSet> {
-        &self.descriptors
+        &self.descriptor_sets
     }
 
     pub fn init_descriptor(&self, device: &Device, data: &AppData, i: usize) {
@@ -53,7 +53,7 @@ impl SkyBox {
 #[derive(Debug)]
 pub struct SkyBox {
     pub texture_data: TextureData,
-    pub descriptors: Vec<DescriptorSet>,
+    pub descriptor_sets: Vec<DescriptorSet>,
 }
 impl SkyBox {
     pub fn load(
@@ -98,7 +98,7 @@ impl SkyBox {
 
         return Ok(Self {
             texture_data,
-            descriptors: vec![],
+            descriptor_sets: vec![],
         });
     }
 }

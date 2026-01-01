@@ -2,9 +2,8 @@ use std::f32::consts::PI;
 
 use VulcanEngine_0::{
     game_objects::{skybox::SkyBox, transform::Transform},
-    vulkan::renderer::{self, VulkanData},
+    vulkan::winit_app::{self, VulkanData},
 };
-use bevy::color::palettes::tailwind::PINK_600;
 use glam::{Quat, Vec3};
 
 use VulcanEngine_0::gui::gui;
@@ -17,7 +16,7 @@ use winit::{
 use vulkanalia::vk::ErrorCode;
 fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode)>> {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     gui::run();
     return Ok(());
     let event_loop = event_loop::EventLoop::new().unwrap();

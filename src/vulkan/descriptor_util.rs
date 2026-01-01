@@ -80,7 +80,7 @@ pub unsafe fn pbr_descriptor_set_layout(device: &Device, data: &mut AppData) -> 
 
     let bindings = &[camera, ortho_light, object_binding, sampler_binding];
     let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
-    data.descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
+    data.pbr_descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
 
     Ok(())
 }
@@ -191,7 +191,7 @@ where
     V: Vertex,
     U: UniformBuffer,
 {
-    let layouts = vec![data.descriptor_set_layout; data.swapchain_images.len()];
+    let layouts = vec![data.pbr_descriptor_set_layout; data.swapchain_images.len()];
     let info = vk::DescriptorSetAllocateInfo::builder()
         .descriptor_pool(data.descriptor_pool)
         .set_layouts(&layouts);
@@ -219,7 +219,7 @@ pub unsafe fn create_skybox_descriptor_sets(
     let Some(skybox) = &mut scene.skybox else {
         return Ok(());
     };
-    skybox.descriptors = device.allocate_descriptor_sets(&info)?;
+    skybox.descriptor_sets = device.allocate_descriptor_sets(&info)?;
     for i in 0..data.swapchain_images.len() {
         skybox.init_descriptor(device, data, i);
     }

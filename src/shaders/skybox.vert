@@ -1,5 +1,5 @@
 #version 450
-
+#define INF 100
 
 layout(binding = 0) uniform UniformBufferObject {
 	mat4 view;
@@ -13,10 +13,10 @@ void main() {
 
 	//const array of positions for the triangle
 	vec3 positions[4] = vec3[4](
-		vec3(-1.0f,-1.0f, 0.0f),
-		vec3(-1.0f,1.0f, 0.0f),
-		vec3(1.0f,-1.0f,0.0f),
-        vec3(1.0f,1.0f,0.0f)
+		vec3(-1.0f,-1.0f, 0.999999),
+		vec3(-1.0f,1.0f,  0.999999),
+		vec3(1.0f,-1.0f,  0.999999),
+        vec3(1.0f,1.0f,   0.999999)
 	);
 
 	//const array of colors for the triangle

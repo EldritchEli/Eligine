@@ -1,11 +1,14 @@
-#![allow(unsafe_op_in_unsafe_fn)]
-use crate::gui::gui::Gui;
-use crate::vulkan::command_buffer_util::create_command_buffers;
-use crate::vulkan::command_pool::{create_command_pool, create_transient_command_pool};
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
+use crate::gltf;
+use crate::gui::gui::{Gui, create_gui_descriptor_sets};
+use crate::vulkan::command_buffer_util::{create_command_buffer, create_command_buffers};
+use crate::vulkan::command_pool::{
+    CommandCenter, create_command_pools, create_transient_command_pool,
+};
 use crate::vulkan::descriptor_util::{
-    create_descriptor_pool, create_global_buffers, create_gui_descriptor_sets,
-    create_pbr_descriptor_sets, create_skybox_descriptor_sets, create_uniform_buffers,
-    gui_descriptor_set_layout, pbr_descriptor_set_layout, skybox_descriptor_set_layout,
+    create_descriptor_pool, create_global_buffers, create_pbr_descriptor_sets,
+    create_skybox_descriptor_sets, create_uniform_buffers, gui_descriptor_set_layout,
+    pbr_descriptor_set_layout, skybox_descriptor_set_layout,
 };
 use crate::vulkan::device_util::{create_logical_device, pick_physical_device};
 use crate::vulkan::framebuffer_util::{create_depth_objects, create_framebuffers};
@@ -15,11 +18,10 @@ use crate::vulkan::render_pass_util::create_render_pass;
 use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::vulkan::sync_util::create_sync_objects;
 use crate::vulkan::uniform_buffer_object::{
-    GlobalUniform, OrthographicLight, PbrUniform, UniformBuffer,
+    GlobalUniform, OrthographicLight, PbrPushConstant, PbrUniform, UniformBuffer,
 };
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
-use crate::{gltf, gui};
 use anyhow::anyhow;
 use std::f32::consts::PI;
 use std::path::Path;
@@ -51,6 +53,7 @@ pub struct App {
     pub frame: usize,
     pub resized: bool,
     pub start: Instant,
+    pub time_stamp: f32,
 }
 
 /// The Vulkan handles and associated properties used by our Vulkan app.
@@ -74,6 +77,7 @@ pub struct AppData {
     pub skybox_descriptor_set_layout: vk::DescriptorSetLayout,
     pub pbr_pipeline_layout: vk::PipelineLayout,
     pub pbr_pipeline: vk::Pipeline,
+    pub pbr_push_contant: PbrPushConstant,
     pub skybox_pipeline_layout: vk::PipelineLayout,
     pub skybox_pipeline: vk::Pipeline,
     pub gui_descriptor_layout: vk::DescriptorSetLayout,
@@ -83,10 +87,10 @@ pub struct AppData {
     pub global_buffer_memory: Vec<vk::DeviceMemory>,
     pub framebuffers: Vec<vk::Framebuffer>,
 
-    pub command_pool: vk::CommandPool,
+    pub command_centers: Vec<CommandCenter>,
     pub transient_command_pool: vk::CommandPool,
-    pub command_buffers: Vec<vk::CommandBuffer>,
     pub transient_command_buffers: Vec<vk::CommandBuffer>,
+    pub single_time_pool: vk::CommandPool,
 
     pub image_available_semaphores: Vec<vk::Semaphore>,
     pub render_finished_semaphores: Vec<vk::Semaphore>,
@@ -117,21 +121,19 @@ impl App {
         pick_physical_device(&instance, &mut data)?;
         let device = create_logical_device(&entry, &instance, &mut data)?;
         let start = Instant::now();
-        //let x = window.inner_size().width as f32;
-        //let y = window.inner_size().height as f32;
         create_swapchain(window, &instance, &device, &mut data)?;
         create_swapchain_image_views(&device, &mut data)?;
         create_render_pass(&instance, &device, &mut data)?;
         pbr_descriptor_set_layout(&device, &mut data)?;
         skybox_descriptor_set_layout(&device, &mut data)?;
         gui_descriptor_set_layout(&device, &mut data)?;
-        create_pbr_pipeline(&device, &mut data, 1)?;
         gui_pipeline(&device, &mut data, 0)?;
+        create_pbr_pipeline(&device, &mut data, 1)?;
         skybox_pipeline(&device, &mut data, 2)?;
-        create_command_pool(&instance, &device, &mut data)?;
         create_color_objects(&instance, &device, &mut data)?;
         create_depth_objects(&instance, &device, &mut data)?;
         create_framebuffers(&device, &mut data)?;
+        create_command_pools(&instance, &device, &mut data)?;
         create_transient_command_pool(&instance, &device, &mut data)?;
         create_descriptor_pool(&device, &mut data, 30)?;
 
@@ -149,7 +151,7 @@ impl App {
             frame: 0,
             resized,
             start,
-            //window,
+            time_stamp: 0.0, //window,
         };
         Ok(app)
     }
@@ -159,7 +161,7 @@ impl App {
             &self.instance,
             &self.device,
             &mut self.data,
-            &mut &mut self.scene,
+            &mut self.scene,
             path.as_ref(),
         ) {
             Ok(object) => object,
@@ -194,7 +196,6 @@ impl App {
         create_color_objects(&self.instance, &self.device, &mut self.data)?;
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
-        //create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data, 30)?;
         create_global_buffers(
             &self.instance,
@@ -218,8 +219,9 @@ impl App {
                 object,
             )?;
         }
-        for v in &mut gui.vertex_data {
-            create_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, v)?;
+        for v in &mut gui.render_objects {
+            v.descriptor_sets =
+                create_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, &v.id)?;
         }
 
         create_command_buffers(
@@ -247,6 +249,9 @@ impl App {
         let proj = CORRECTION * perspective;
 
         //let model_rotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time);
+        self.data.pbr_push_contant = PbrPushConstant {
+            proj_inv_view: (view.inverse()),
+        };
         for (_i, object) in self.scene.render_objects.iter() {
             let mut model = [Mat4::default(); 10];
             for (index, instance_index) in object.instances.iter().enumerate() {
@@ -259,7 +264,7 @@ impl App {
             };
             ubo.map_memory(&self.device, object.uniform_buffers_memory[image_index])?;
         }
-        if let Some(_) = &self.scene.skybox {
+        if self.scene.skybox.is_some() {
             let scale = window.scale_factor() as f32;
             let ubo = GlobalUniform {
                 view,
@@ -280,6 +285,16 @@ impl App {
         memcpy(&self.scene.sun.omnidirectional_light, memory.cast(), 1);
 
         self.device.unmap_memory(self.scene.sun.memory[image_index]);
+        Ok(())
+    }
+    pub unsafe fn update_descriptor_sets(
+        &self,
+        gui: &mut Gui,
+        image_index: usize,
+    ) -> anyhow::Result<()> {
+        for obj in &mut gui.render_objects {
+            // update_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, obj, image_index)?;
+        }
         Ok(())
     }
 
@@ -312,12 +327,24 @@ impl App {
         }
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
-
+        //self.update_descriptor_sets(image_index)?;
         self.update_uniform_buffer(image_index, window)?;
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let command_buffers = &[self.data.command_buffers[image_index]];
+        self.device.reset_command_pool(
+            self.data.command_centers[image_index].command_pool,
+            vk::CommandPoolResetFlags::RELEASE_RESOURCES,
+        )?;
+        create_command_buffer(
+            &self.device,
+            &mut self.scene,
+            &mut self.data,
+            window,
+            Some(gui),
+            image_index,
+        )?;
+        let command_buffers = &[self.data.command_centers[image_index].command_buffers[0]];
         let signal_semaphores = &[self.data.render_finished_semaphores[self.frame]];
         let submit_info = vk::SubmitInfo::builder()
             .wait_semaphores(wait_semaphores)
@@ -366,14 +393,13 @@ impl App {
         self.device
             .destroy_descriptor_set_layout(self.data.gui_descriptor_layout, None);
 
-        for (_i, data) in &gui.image_map {
+        for data in gui.image_map.values() {
             self.device.destroy_sampler(data.sampler, None);
             self.device.destroy_image_view(data.image_view, None);
 
             self.device.destroy_image(data.image, None);
             self.device.free_memory(data.image_memory, None);
         }
-        // self.gui.as_mut().unwrap().destroy(&self.device);
         for (_i, object) in self.scene.render_objects.iter() {
             self.device
                 .destroy_sampler(object.pbr.texture_data.sampler, None);
@@ -402,14 +428,13 @@ impl App {
             .image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        for v in &gui.vertex_data {
-            self.device
-                .free_memory(v.vertex_data.vertex_buffer_memory, None);
-            self.device
-                .destroy_buffer(v.vertex_data.vertex_buffer, None);
-            self.device
-                .free_memory(v.vertex_data.index_buffer_memory, None);
-            self.device.destroy_buffer(v.vertex_data.index_buffer, None);
+        for v in &gui.render_objects {
+            for v_data in &v.vertex_data {
+                self.device.free_memory(v_data.vertex_buffer_memory, None);
+                self.device.destroy_buffer(v_data.vertex_buffer, None);
+                self.device.free_memory(v_data.index_buffer_memory, None);
+                self.device.destroy_buffer(v_data.index_buffer, None);
+            }
         }
         for (_i, object) in self.scene.render_objects.iter() {
             self.device
@@ -424,9 +449,11 @@ impl App {
         if let Some(skybox) = &self.scene.skybox {
             skybox.texture_data.destroy_image(&self.device);
         }
-
+        for center in &self.data.command_centers {
+            self.device.destroy_command_pool(center.command_pool, None);
+        }
         self.device
-            .destroy_command_pool(self.data.command_pool, None);
+            .destroy_command_pool(self.data.single_time_pool, None);
         self.device
             .destroy_command_pool(self.data.transient_command_pool, None);
 
@@ -492,8 +519,10 @@ impl App {
             .framebuffers
             .iter()
             .for_each(|f| self.device.destroy_framebuffer(*f, None));
-        self.device
-            .free_command_buffers(self.data.command_pool, &self.data.command_buffers);
+        for center in &self.data.command_centers {
+            self.device
+                .free_command_buffers(center.command_pool, &center.command_buffers);
+        }
         self.device.destroy_pipeline(self.data.pbr_pipeline, None);
         self.device
             .destroy_pipeline_layout(self.data.pbr_pipeline_layout, None);

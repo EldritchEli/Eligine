@@ -14,6 +14,7 @@ dependencies = [
  "epaint",
  "glam 0.30.9",
  "gltf",
+ "itertools 0.14.0",
  "log",
  "nalgebra",
  "nalgebra-glm",

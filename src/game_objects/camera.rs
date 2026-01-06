@@ -35,9 +35,9 @@ impl Camera {
     }
 
     pub fn rotate_xy(&mut self, y: f32, x: f32) {
-        self.transform.rotation = Quat::from_rotation_y(0.01 * self.rotation_speed * y)
+        self.transform.rotation = Quat::from_rotation_y(self.rotation_speed * y)
             * self.transform.rotation
-            * Quat::from_rotation_x(0.01 * self.rotation_speed * x);
+            * Quat::from_rotation_x(self.rotation_speed * x);
     }
     pub fn move_forward(&mut self, amount: f32) {
         let v: Vec3 = (-amount * self.movement_speed) * (self.transform.rotation * Vec3::Z);
@@ -55,25 +55,25 @@ impl Camera {
     pub fn update(&mut self, delta_time: f32, input: &InputState) {
         //println!("camera position: {:?}", self.transform.position);
         let mouse_delta = 100.0 * delta_time * input.mouse_delta;
-
+        let mult = if input.key_shift.is_down() { 2.0 } else { 1.0 };
         if input.key_w.is_down() {
-            self.move_forward(delta_time);
+            self.move_forward(delta_time * mult);
         };
         if input.key_s.is_down() {
-            self.move_forward(-delta_time);
+            self.move_forward(-delta_time * mult);
         };
 
         if input.key_a.is_down() {
-            self.move_right(delta_time);
+            self.move_right(delta_time * mult);
         };
         if input.key_d.is_down() {
-            self.move_right(-delta_time);
+            self.move_right(-delta_time * mult);
         };
         if input.key_e.is_down() {
-            self.move_up(-delta_time);
+            self.move_up(-delta_time * mult);
         };
         if input.key_q.is_down() {
-            self.move_up(delta_time);
+            self.move_up(delta_time * mult);
         };
 
         if input.mouse_right.is_down() {
@@ -83,6 +83,6 @@ impl Camera {
 }
 impl Default for Camera {
     fn default() -> Self {
-        Self::new(Vec3::ZERO, Vec3::Z, 1.0, 0.20, 1.0, 45.0)
+        Self::new(Vec3::ZERO, Vec3::Z, 4.0, 0.025, 1.0, 45.0)
     }
 }

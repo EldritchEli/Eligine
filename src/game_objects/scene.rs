@@ -172,16 +172,8 @@ impl Scene {
 
 impl Default for Scene {
     fn default() -> Self {
-        let camera = Camera::new(
-            Vec3::new(0.0, -1.0, -3.0),
-            Vec3::ZERO,
-            2.5,
-            0.3,
-            0.0,
-            PI / 4.0,
-        );
         Self {
-            camera,
+            camera: Camera::default(),
             render_objects: ParaSlab::new(),
             objects: ParaSlab::new(),
             materials: Vec::default(),

@@ -1,3 +1,4 @@
+use std::mem::transmute;
 use std::ptr::copy_nonoverlapping as memcpy;
 
 use bevy::math::Vec3;
@@ -11,9 +12,14 @@ use vulkanalia::{
 use crate::vulkan::{descriptor_util::create_uniform_buffers, render_app::AppData};
 
 #[repr(C)]
-#[derive(Debug, Clone)]
-pub struct PushConstants {
+#[derive(Debug, Clone, Default)]
+pub struct PbrPushConstant {
     pub proj_inv_view: Mat4,
+}
+impl PbrPushConstant {
+    pub fn data(&self) -> [u8; 64] {
+        unsafe { transmute(self.proj_inv_view.to_cols_array()) }
+    }
 }
 
 pub trait UniformBuffer: Sized {

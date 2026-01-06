@@ -1,4 +1,4 @@
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::framebuffer_util::get_depth_format;
 use crate::vulkan::render_app::AppData;
 use vulkanalia::vk::{

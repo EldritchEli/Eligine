@@ -1,4 +1,4 @@
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::image_util::{create_image, create_image_view};
 use crate::vulkan::render_app::AppData;
 use anyhow::{Result, anyhow};

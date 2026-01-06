@@ -1,4 +1,4 @@
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use std::fs::File;
 use std::intrinsics::copy_nonoverlapping as memcpy;
 
@@ -80,7 +80,7 @@ impl TextureData {
         image_memory: vk::DeviceMemory,
         depth: u32,
     ) -> Result<TextureData> {
-        let image_view = Self::create_texture_image_view(image, mip_levels, &device, data, depth)?;
+        let image_view = Self::create_texture_image_view(image, mip_levels, device, data, depth)?;
         let sampler = Self::create_texture_sampler(mip_levels, device)?;
         Ok(Self {
             mip_levels,
@@ -196,6 +196,90 @@ impl TextureData {
         Ok((mip_levels, texture_image, texture_image_memory))
     }
 
+    pub unsafe fn update_texture_image(
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        pixels: Vec<u8>,
+        size: (u32, u32, u32),
+    ) -> Result<(u32, vk::Image, vk::DeviceMemory)> {
+        let (width, height, depth) = size;
+        let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
+        let (staging_buffer, staging_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            pixels.len() as u64,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+
+        let memory = device.map_memory(
+            staging_buffer_memory,
+            0,
+            pixels.len() as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
+        memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
+
+        device.unmap_memory(staging_buffer_memory);
+
+        let (texture_image, texture_image_memory) = create_image(
+            instance,
+            device,
+            data,
+            width,
+            height,
+            depth,
+            mip_levels,
+            vk::SampleCountFlags::_1,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
+        //texture_image;
+        //texture_image_memory;
+
+        transition_image_layout(
+            device,
+            data,
+            texture_image,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            mip_levels,
+            1,
+        )?;
+
+        copy_buffer_to_image(
+            device,
+            data,
+            staging_buffer,
+            texture_image,
+            width,
+            height,
+            1,
+        )?;
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+
+        generate_mipmaps(
+            instance,
+            device,
+            data,
+            texture_image,
+            vk::Format::R8G8B8A8_SRGB,
+            width,
+            height,
+            1,
+            mip_levels,
+        )?;
+        Ok((mip_levels, texture_image, texture_image_memory))
+    }
+
     pub unsafe fn create_texture_image_view(
         texture_image: vk::Image,
         mip_levels: u32,
@@ -203,14 +287,14 @@ impl TextureData {
         _data: &mut AppData,
         depth: u32,
     ) -> Result<vk::ImageView> {
-        Ok(create_image_view(
+        create_image_view(
             device,
             texture_image,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageAspectFlags::COLOR,
             mip_levels,
             depth,
-        )?)
+        )
     }
 
     pub unsafe fn create_texture_sampler(mip_levels: u32, device: &Device) -> Result<vk::Sampler> {
@@ -241,7 +325,7 @@ impl TextureData {
         size: (u32, u32),
     ) -> Result<(u32, vk::Image, vk::DeviceMemory)> {
         let (width, height) = size;
-        const depth: u32 = 6;
+        const DEPTH: u32 = 6;
         let mip_levels = 1;
         let (staging_buffer, staging_buffer_memory) = unsafe {
             create_buffer(
@@ -322,7 +406,7 @@ impl TextureData {
             texture_image,
             width,
             height,
-            depth,
+            DEPTH,
         )?;
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
@@ -407,7 +491,7 @@ pub unsafe fn create_image(
     data: &AppData,
     width: u32,
     height: u32,
-    _depth: u32,
+    depth: u32,
     mip_levels: u32,
     samples: vk::SampleCountFlags,
     format: vk::Format,
@@ -518,7 +602,6 @@ pub unsafe fn transition_image_layout(
         &[] as &[vk::BufferMemoryBarrier],
         &[barrier],
     );
-    if depth == 6 {}
     end_single_time_commands(device, data, command_buffer)?;
 
     Ok(())

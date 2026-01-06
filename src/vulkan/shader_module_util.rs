@@ -1,4 +1,4 @@
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use vulkanalia::bytecode::Bytecode;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, vk};

@@ -1,10 +1,11 @@
 use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
-use glam::{vec2, I8Vec2, Vec2};
+use glam::{I8Vec2, Vec2, vec2};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(Default, PartialEq, Debug, Clone, Copy)]
 pub enum KeyState {
+    #[default]
     Nothing,
     Enter,
     Release,
@@ -27,9 +28,9 @@ impl KeyState {
         Enter == self
     }
 }
-
+#[derive(Debug, Clone, Default)]
 pub struct InputState {
-    pub mouse_wheel_delta: I8Vec2,
+    pub mouse_wheel_delta: Vec2,
     pub mouse_delta: Vec2,
     pub mouse_position: Vec2,
     pub mouse_left: KeyState,
@@ -79,47 +80,38 @@ impl InputState {
     pub(crate) fn new() -> Self {
         Self::default()
     }
-    pub fn set_mouse_delta(&mut self, x: f64, y: f64) -> () {
-        self.mouse_delta = vec2(x as f32, x as f32);
+    pub fn set_mouse_delta(&mut self, event: &WindowEvent) {
+        if let WindowEvent::CursorMoved { position, .. } = event {
+            self.mouse_delta = vec2(
+                position.x as f32 - self.mouse_position.x,
+                position.y as f32 - self.mouse_position.y,
+            );
+        } else {
+            self.mouse_delta = Vec2::ZERO
+        }
     }
-    fn set_mouse_position(&mut self, p: (f64, f64)) -> () {
-        let (f1, f2) = p;
-        self.mouse_position = vec2(f1 as f32, f2 as f32);
+    fn set_mouse_position(&mut self, event: &WindowEvent) {
+        if let WindowEvent::CursorMoved { position, .. } = event {
+            self.mouse_position = vec2(position.x as f32, position.y as f32);
+        }
     }
-    fn set_mouse_buttons(&mut self, _p: (f64, f64)) -> () {
-        ();
+
+    fn set_mouse_scroll_delta(&mut self, event: &WindowEvent) {
+        if let WindowEvent::MouseWheel { delta, .. } = event {
+            self.mouse_delta = match delta {
+                MouseScrollDelta::LineDelta(x, y) => vec2(*x, *y),
+                MouseScrollDelta::PixelDelta(physical_position) => {
+                    vec2(physical_position.x as f32, physical_position.y as f32)
+                }
+            };
+        }
     }
 
     pub fn read_event(&mut self, event: &WindowEvent) -> Option<()> {
-        /*  if let Event::DeviceEvent {
-            event: MouseMotion { delta, .. },
-            ..
-        } = event
-        {
-            // println!("Mouse delta: {:?} ", delta);
-            self.set_mouse_delta(*delta)
-        } else {
-            self.set_mouse_delta((0.0, 0.0))
-        }*/
+        self.set_mouse_delta(event);
+        self.set_mouse_position(event);
+        self.set_mouse_scroll_delta(event);
         match event {
-            WindowEvent::CursorMoved { position, .. } => {
-                self.mouse_delta = vec2(
-                    position.x as f32 - self.mouse_position.x,
-                    position.y as f32 - self.mouse_position.y,
-                );
-                self.set_mouse_position((position.x, position.y));
-                //println!("Cursor moved {:?} ", position);
-                Some(())
-            }
-
-            WindowEvent::MouseWheel { delta, .. } => match delta {
-                MouseScrollDelta::LineDelta(_x, _y) => {
-                    // println!("mouse wheel deltaxy: {}{}", x,y);
-                    Some(())
-                }
-                _ => Some(()),
-            },
-
             WindowEvent::MouseInput {
                 device_id: _,
                 state,
@@ -157,9 +149,9 @@ impl InputState {
             _ => None,
         }
     }
-    pub fn set_key_state(&mut self, state: &ElementState, physical: &PhysicalKey) -> () {
-        match physical {
-            PhysicalKey::Code(key) => match key {
+    pub fn set_key_state(&mut self, state: &ElementState, physical: &PhysicalKey) {
+        if let PhysicalKey::Code(key) = physical {
+            match key {
                 KeyCode::AltLeft => {
                     self.key_alt = InputState::set_key(&self.key_alt, key, state);
                 }
@@ -255,8 +247,7 @@ impl InputState {
                 }
 
                 a => println!("{:?} {:?}", a, state),
-            },
-            _ => {}
+            }
         }
     }
 
@@ -314,53 +305,6 @@ impl InputState {
                     Enter
                 }
             },
-        }
-    }
-}
-
-impl Default for InputState {
-    fn default() -> Self {
-        Self {
-            mouse_wheel_delta: I8Vec2::new(0, 0),
-            mouse_delta: vec2(0.0, 0.0),
-            mouse_position: vec2(0.0, 0.0),
-            mouse_left: KeyState::Nothing,
-            mouse_right: KeyState::Nothing,
-            mouse_middle: KeyState::Nothing,
-            mouse_on_screen: false,
-            key_w: KeyState::Nothing,
-            key_a: KeyState::Nothing,
-            key_s: KeyState::Nothing,
-            key_q: KeyState::Nothing,
-            key_e: KeyState::Nothing,
-            key_r: KeyState::Nothing,
-            key_z: KeyState::Nothing,
-            key_x: KeyState::Nothing,
-            key_c: KeyState::Nothing,
-            key_v: KeyState::Nothing,
-            key_esc: KeyState::Nothing,
-            key_space: KeyState::Nothing,
-            key1: KeyState::Nothing,
-            key2: KeyState::Nothing,
-            key3: KeyState::Nothing,
-            key4: KeyState::Nothing,
-            key5: KeyState::Nothing,
-            key6: KeyState::Nothing,
-            key7: KeyState::Nothing,
-            key8: KeyState::Nothing,
-            key9: KeyState::Nothing,
-            key0: KeyState::Nothing,
-            key_d: KeyState::Nothing,
-            key_h: KeyState::Nothing,
-            key_alt: KeyState::Nothing,
-            key_ctrl: KeyState::Nothing,
-            key_shift: KeyState::Nothing,
-            key_enter: KeyState::Nothing,
-            key_right: KeyState::Nothing,
-            key_up: KeyState::Nothing,
-            key_backspace: KeyState::Nothing,
-            key_left: KeyState::Nothing,
-            key_down: KeyState::Nothing,
         }
     }
 }

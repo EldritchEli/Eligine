@@ -1,3 +1,4 @@
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::render_app::AppData;
 use anyhow::{Result, anyhow};
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder, InstanceV1_0};
@@ -72,7 +73,7 @@ pub unsafe fn begin_single_time_commands(
 ) -> Result<vk::CommandBuffer> {
     let info = vk::CommandBufferAllocateInfo::builder()
         .level(vk::CommandBufferLevel::PRIMARY)
-        .command_pool(data.command_pool)
+        .command_pool(data.single_time_pool)
         .command_buffer_count(1);
 
     let command_buffer = unsafe { device.allocate_command_buffers(&info) }?[0];
@@ -94,9 +95,9 @@ pub unsafe fn end_single_time_commands(
 
     let command_buffers = &[command_buffer];
     let info = vk::SubmitInfo::builder().command_buffers(command_buffers);
-    (unsafe { device.queue_submit(data.graphics_queue, &[info], vk::Fence::null()) })?;
-    (unsafe { device.queue_wait_idle(data.graphics_queue) })?;
-    unsafe { device.free_command_buffers(data.command_pool, &[command_buffer]) };
+    unsafe { device.queue_submit(data.graphics_queue, &[info], vk::Fence::null()) }?;
+    unsafe { device.queue_wait_idle(data.graphics_queue) }?;
+    unsafe { device.free_command_buffers(data.single_time_pool, &[command_buffer]) };
 
     Ok(())
 }

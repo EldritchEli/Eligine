@@ -6,11 +6,11 @@
     unsafe_op_in_unsafe_fn
 )]
 use crate::gui::gui::Gui;
+use crate::gui::gui::show;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::render_app::App;
 use anyhow::anyhow;
 
-//use egui_winit_vulkano::{Gui, GuiConfig};
 use log::error;
 use vulkanalia::prelude::v1_0::*;
 use winit::application::ApplicationHandler;
@@ -32,19 +32,6 @@ impl AppState {
             AppState::Initialized { app } => true,
         }
     }
-
-    /*   pub fn set_window(&mut self, window: Window) {
-    match self {
-        AppState::Uninitialized { .. } => (),
-        AppState::Initialized { app } => self.window = window,
-    }*/
-
-    /*  pub fn request_redraw(&mut self) {
-        match self {
-            AppState::Uninitialized { .. } => todo!(),
-            AppState::Initialized { app } => app.window.request_redraw(),
-        }
-    }*/
 }
 pub struct VulkanData {
     pub input_state: InputState,
@@ -52,8 +39,6 @@ pub struct VulkanData {
     pub window: Option<Window>,
     pub window_minimized: bool,
     pub window_name: String,
-    pub time_stamp: f32,
-    pub render_stamp: f32,
     pub app: AppState,
 }
 impl VulkanData {
@@ -78,20 +63,21 @@ impl VulkanData {
                 init(&mut app);
                 if let Some(ctx) = gui_ctx {
                     let pixels_per_point = ctx.pixels_per_point();
-                    let mut gui = Gui::init(&app.device, &mut app.data, event_loop, ctx, &window)?;
+                    let mut gui = Gui::new(event_loop, ctx, &window, show)?;
                     let output = gui.run_egui_fst(&window);
 
+                    gui.update_gui_images(&app.instance, &app.device, &mut app.data, &output)?;
                     gui.update_gui_mesh(
                         &app.instance,
                         &app.device,
                         &mut app.data,
                         &output,
                         pixels_per_point,
+                        None,
                     )?;
-                    gui.update_gui_images(&app.instance, &app.device, &mut app.data, output)?;
                     self.gui = Some(gui);
                 }
-                self.app = AppState::Initialized { app: app };
+                self.app = AppState::Initialized { app };
                 self.window = Some(window);
                 Ok(())
             }
@@ -105,12 +91,9 @@ impl Default for VulkanData {
             input_state: Default::default(),
             window_name: "Eligine".to_string(),
             window_minimized: false,
-            time_stamp: 0.0,
-            render_stamp: 0.0,
             app: AppState::Uninitialized { init: |app| {} },
             gui: None,
             window: None,
-            //gui: None,
         }
     }
 }
@@ -119,9 +102,7 @@ impl ApplicationHandler for VulkanData {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let (gui_ctx, window) = Gui::get_window_and_ctx(event_loop).unwrap();
         window.request_redraw();
-        //self.window = window;
         if self.app.initialized() {
-            // self.app.set_window(window);
         } else {
             if let Err(st) = self.run_init(window, event_loop, Some(gui_ctx)) {
                 error!("{:?}", st);
@@ -144,9 +125,9 @@ impl ApplicationHandler for VulkanData {
         };
 
         let elapsed = app.start.elapsed().as_secs_f32();
-        let dt = elapsed - self.time_stamp;
+        let dt = elapsed - app.time_stamp;
 
-        self.time_stamp = elapsed;
+        app.time_stamp = elapsed;
         let gui = self.gui.as_mut().unwrap();
         let output = gui.run_egui(self.window.as_ref().unwrap(), &event);
         self.input_state.read_event(&event);

@@ -89,6 +89,19 @@ where
             index_buffer_memory,
         })
     }
+    pub unsafe fn update_vertex_data(
+        &mut self,
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        vertices: Vec<V>,
+        indices: Vec<u32>,
+    ) -> Result<()> {
+        self.update_vertex_buffer(instance, device, data, vertices)?;
+
+        self.update_index_buffer(instance, device, data, indices)?;
+        Ok(())
+    }
     pub unsafe fn create_vertex_buffer(
         instance: &Instance,
         device: &Device,
@@ -131,6 +144,51 @@ where
 
         Ok((vertex_buffer, vertex_buffer_memory))
     }
+    pub unsafe fn update_vertex_buffer(
+        &mut self,
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        vertices: Vec<V>,
+    ) -> Result<UpdateResult> {
+        if vertices.len() > self.vertices.len() {
+            //new index buffer won't fit the already allocated one so we need to recreate it
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
+            let (buffer, memory) = Self::create_vertex_buffer(instance, device, data, &vertices)?;
+            self.vertex_buffer = buffer;
+            self.vertex_buffer_memory = memory;
+            self.vertices = vertices;
+            return Ok(UpdateResult::NewAllocation(buffer, memory));
+        }
+        let size = (size_of::<V>() * vertices.len()/*VERTICES.len()*/) as u64;
+
+        let (staging_buffer, staging_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+
+        let memory =
+            device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+
+        memcpy(
+            vertices.as_ptr(), /*VERTICES.as_ptr()*/
+            memory.cast(),
+            vertices.len(),
+        );
+
+        device.unmap_memory(staging_buffer_memory);
+
+        copy_buffer(device, data, staging_buffer, self.vertex_buffer, size)?;
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+
+        Ok(UpdateResult::SameAllocation)
+    }
 
     pub unsafe fn create_index_buffer(
         instance: &Instance,
@@ -172,6 +230,53 @@ where
 
         Ok((index_buffer, index_buffer_memory))
     }
+    pub unsafe fn update_index_buffer(
+        &mut self,
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        indices: Vec<u32>,
+    ) -> Result<UpdateResult> {
+        if indices.len() > self.indices.len() {
+            //new index buffer won't fit the already allocated one so we need to recreate it
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
+            let (buffer, memory) = Self::create_index_buffer(instance, device, data, &indices)?;
+            self.index_buffer = buffer;
+            self.index_buffer_memory = memory;
+            self.indices = indices;
+            return Ok(UpdateResult::NewAllocation(buffer, memory));
+        }
+        let size = (size_of::<u32>() * indices.len()/*INDICES.len()*/) as u64;
+
+        let (staging_buffer, staging_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+
+        let memory =
+            device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+
+        memcpy(indices.as_ptr(), memory.cast(), indices.len());
+
+        device.unmap_memory(staging_buffer_memory);
+
+        copy_buffer(device, data, staging_buffer, self.index_buffer, size)?;
+
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+
+        Ok(UpdateResult::SameAllocation)
+    }
+}
+
+pub enum UpdateResult {
+    NewAllocation(vk::Buffer, vk::DeviceMemory),
+    SameAllocation,
 }
 /*pub fn load_model(data: &mut AppData, path: PathBuf) -> Result<()> {
     let mut reader = BufReader::new(File::open(path)?);

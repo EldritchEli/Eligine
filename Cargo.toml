@@ -27,7 +27,5 @@ gltf = "1.4.1"
 egui = "0.33.2"
 egui-winit = "0.33.2"
 epaint = "0.33.2"
+itertools = "0.14.0"
 
-[features]
-mac
-pop_os

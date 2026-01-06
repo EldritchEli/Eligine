@@ -1,7 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::shader_module_util::create_shader_module;
-use crate::vulkan::uniform_buffer_object::PushConstants;
+use crate::vulkan::uniform_buffer_object::PbrPushConstant;
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexGui, VertexPbr};
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
 use vulkanalia::{Device, vk};
@@ -14,8 +14,8 @@ pub unsafe fn create_pbr_pipeline(
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
         .build();
-    let vert = std::fs::read(std::format!("src/shaders/pbr_vert.spv"))?;
-    let frag = std::fs::read(std::format!("src/shaders/pbr_frag.spv"))?;
+    let vert = std::fs::read("src/shaders/spv/pbr_vert.spv").unwrap();
+    let frag = std::fs::read("src/shaders/spv/pbr_frag.spv").unwrap();
 
     let vert_shader_module = create_shader_module(device, &vert[..])?;
     let frag_shader_module = create_shader_module(device, &frag[..])?;
@@ -26,8 +26,8 @@ pub unsafe fn create_pbr_pipeline(
         .name(b"main\0");
     let push_range = vk::PushConstantRange::builder()
         .offset(0)
-        .size(size_of::<PushConstants>() as u32)
-        .stage_flags(vk::ShaderStageFlags::VERTEX)
+        .size(size_of::<PbrPushConstant>() as u32)
+        .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
         .build();
     //specialization_info for shader constants!!
     let frag_stage = vk::PipelineShaderStageCreateInfo::builder()
@@ -146,8 +146,8 @@ pub unsafe fn skybox_pipeline(
     data: &mut AppData,
     subpass_position: u32,
 ) -> anyhow::Result<()> {
-    let vert = std::fs::read(format!("src/shaders/skybox_vert.spv"))?;
-    let frag = std::fs::read(format!("src/shaders/skybox_frag.spv"))?;
+    let vert = std::fs::read("src/shaders/spv/skybox_vert.spv").unwrap();
+    let frag = std::fs::read("src/shaders/spv/skybox_frag.spv").unwrap();
 
     let vert_shader_module = create_shader_module(device, &vert[..])?;
     let frag_shader_module = create_shader_module(device, &frag[..])?;
@@ -275,8 +275,8 @@ pub unsafe fn gui_pipeline(
     data: &mut AppData,
     subpass_position: u32,
 ) -> anyhow::Result<()> {
-    let vert = std::fs::read(format!("src/shaders/gui_vert.spv"))?;
-    let frag = std::fs::read(format!("src/shaders/gui_frag.spv"))?;
+    let vert = std::fs::read("src/shaders/spv/gui_vert.spv").unwrap();
+    let frag = std::fs::read("src/shaders/spv/gui_frag.spv").unwrap();
     let vert_shader_module = create_shader_module(device, &vert[..])?;
     let frag_shader_module = create_shader_module(device, &frag[..])?;
 

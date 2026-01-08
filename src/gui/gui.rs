@@ -81,6 +81,7 @@ pub unsafe fn create_gui_descriptor_sets(
 }
 pub struct Gui {
     pub render_objects: Vec<GuiRenderObject>,
+    pub render_object_length: usize,
     pub image_map: HashMap<TextureId, TextureData>,
     // let images go through all framebuffers before removing, to all images to be removed are not being used
     pub images_to_destroy: Vec<(u8, TextureData)>,
@@ -88,6 +89,7 @@ pub struct Gui {
     ///what should be presented when running the app
     pub show: fn(&Context, &mut Ui),
 }
+
 impl std::fmt::Debug for Gui {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
@@ -131,6 +133,7 @@ impl Gui {
         );
         Ok(Self {
             render_objects: vec![],
+            render_object_length: 0,
             image_map: HashMap::new(),
             images_to_destroy: vec![],
             egui_state,
@@ -258,27 +261,11 @@ impl Gui {
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
         let mut gui_render_objects = vec![];
+        self.render_object_length = primitives.len();
         for i in 0..primitives.len() {
             let prim = &primitives[i];
             let (id, rect) = texture_id[i];
-            let (indices, verts) = match &prim.primitive {
-                epaint::Primitive::Mesh(mesh) => {
-                    let vertices: Vec<VertexGui> = mesh
-                        .vertices
-                        .iter()
-                        .map(|v| VertexGui {
-                            pos: Vec2 {
-                                x: v.pos.x,
-                                y: v.pos.y,
-                            },
-                            uv: Vec2::new(v.uv.x, v.uv.y),
-                            color: U8Vec4::new(v.color.r(), v.color.g(), v.color.b(), v.color.a()),
-                        })
-                        .collect();
-                    (mesh.indices.clone(), vertices)
-                }
-                epaint::Primitive::Callback(_) => todo!(),
-            };
+            let (indices, verts) = prim_to_mesh(prim);
             let mut vertex_data = vec![];
             if let Some(image_index) = image_index {
                 vertex_data[image_index] = unsafe {
@@ -318,8 +305,25 @@ impl Gui {
         Ok(())
     }
 }
-pub fn prim_to_mesh(prim: ClippedPrimitive) -> (Vec<u32>, Vec<VertexData<VertexGui>>) {
-    todo!()
+pub fn prim_to_mesh(prim: &ClippedPrimitive) -> (Vec<u32>, Vec<VertexGui>) {
+    match &prim.primitive {
+        epaint::Primitive::Mesh(mesh) => {
+            let vertices: Vec<VertexGui> = mesh
+                .vertices
+                .iter()
+                .map(|v| VertexGui {
+                    pos: Vec2 {
+                        x: v.pos.x,
+                        y: v.pos.y,
+                    },
+                    uv: Vec2::new(v.uv.x, v.uv.y),
+                    color: U8Vec4::new(v.color.r(), v.color.g(), v.color.b(), v.color.a()),
+                })
+                .collect();
+            (mesh.indices.clone(), vertices)
+        }
+        epaint::Primitive::Callback(_) => todo!(),
+    }
 }
 pub fn show(ctx: &egui::Context, ui: &mut Ui) {
     SidePanel::new(egui::panel::Side::Left, "my panel ")

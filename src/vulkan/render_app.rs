@@ -23,6 +23,7 @@ use crate::vulkan::uniform_buffer_object::{
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
+use egui::FullOutput;
 use std::f32::consts::PI;
 use std::path::Path;
 use std::time::Instant;
@@ -59,6 +60,7 @@ pub struct App {
 /// The Vulkan handles and associated properties used by our Vulkan app.
 #[derive(Clone, Debug, Default)]
 pub struct AppData {
+    pub recreated: bool,
     pub surface: vk::SurfaceKHR,
     pub messenger: vk::DebugUtilsMessengerEXT,
     pub physical_device: vk::PhysicalDevice,
@@ -231,6 +233,7 @@ impl App {
             window,
             Some(gui),
         )?;
+        self.data.recreated = true;
         Ok(())
     }
 
@@ -299,7 +302,12 @@ impl App {
     }
 
     /// Renders a frame for our Vulkan app.
-    pub unsafe fn render(&mut self, window: &Window, gui: &mut Gui) -> anyhow::Result<()> {
+    pub unsafe fn render(
+        &mut self,
+        window: &Window,
+        gui: &mut Gui,
+        egui_output: FullOutput,
+    ) -> anyhow::Result<()> {
         self.device
             .wait_for_fences(&[self.data.in_flight_fences[self.frame]], true, u64::MAX)?;
 
@@ -312,10 +320,17 @@ impl App {
         //let sem = self.data.image_available_semaphores[self.frame];
 
         let image_index = match result {
-            Ok((_, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
-                return self.recreate_swapchain(window, gui);
+            Ok((image_index, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
+                if cfg!(target_os = "macos") {
+                    image_index as usize
+                } else {
+                    return self.recreate_swapchain(window, gui);
+                }
             }
-            Ok((image_index, _)) => image_index as usize,
+            Ok((image_index, _)) => {
+                //self.data.recreated = false;
+                image_index as usize
+            }
             Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return self.recreate_swapchain(window, gui),
             Err(e) => return Err(anyhow!(e)),
         };
@@ -328,6 +343,15 @@ impl App {
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
         //self.update_descriptor_sets(image_index)?;
+        /*  gui.update_gui_images(&self.instance, &self.device, &mut self.data, &egui_output)?;
+        gui.update_gui_mesh(
+            &self.instance,
+            &self.device,
+            &mut self.data,
+            &egui_output,
+            gui.egui_state.egui_ctx().pixels_per_point(),
+            Some(image_index),
+        )?;*/
         self.update_uniform_buffer(image_index, window)?;
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];

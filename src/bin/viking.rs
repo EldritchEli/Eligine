@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 
 use VulcanEngine_0::{
     game_objects::{skybox::SkyBox, transform::Transform},
-    vulkan::winit_app::VulkanData,
+    vulkan::winit_app::WinitWrapper,
 };
 use glam::{Quat, Vec3};
 
@@ -16,10 +16,10 @@ use vulkanalia::vk::ErrorCode;
 fn main() -> Result<(), OneOf<(OsError, anyhow::Error, EventLoopError, ErrorCode)>> {
     let event_loop = event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut vulkan_data = VulkanData::default();
+    let mut vulkan_data = WinitWrapper::default();
 
     vulkan_data
-        .set_init(|app| {
+        .set_init_closure(|app| {
             let _paths = [
                 //"assets/bird_orange.glb",
                 //"assets/living_room/Rubiks Cube.glb",

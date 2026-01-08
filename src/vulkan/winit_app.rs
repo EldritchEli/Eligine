@@ -33,7 +33,25 @@ impl AppState {
         }
     }
 }
-pub struct VulkanData {
+impl AppState {
+    pub fn unwrap(&self) -> &App {
+        match self {
+            AppState::Uninitialized { init } => {
+                panic!("you cannot call unwrap on an uninitialized Appstate")
+            }
+            AppState::Initialized { app } => app,
+        }
+    }
+    pub fn unwrap_mut(&mut self) -> &mut App {
+        match self {
+            AppState::Uninitialized { init } => {
+                panic!("you cannot call unwrap on an uninitialized Appstate")
+            }
+            AppState::Initialized { app } => app,
+        }
+    }
+}
+pub struct WinitWrapper {
     pub input_state: InputState,
     pub gui: Option<Gui>,
     pub window: Option<Window>,
@@ -41,8 +59,8 @@ pub struct VulkanData {
     pub window_name: String,
     pub app: AppState,
 }
-impl VulkanData {
-    pub fn set_init(&mut self, init: fn(&mut App)) -> Result<(), String> {
+impl WinitWrapper {
+    pub fn set_init_closure(&mut self, init: fn(&mut App)) -> Result<(), String> {
         if let AppState::Initialized { .. } = self.app {
             return Err("cannot set init for already initialized app".to_string());
         }
@@ -50,7 +68,7 @@ impl VulkanData {
         Ok(())
     }
 
-    pub fn run_init(
+    pub fn init(
         &mut self,
         window: Window,
         event_loop: &ActiveEventLoop,
@@ -65,7 +83,6 @@ impl VulkanData {
                     let pixels_per_point = ctx.pixels_per_point();
                     let mut gui = Gui::new(event_loop, ctx, &window, show)?;
                     let output = gui.run_egui_fst(&window);
-
                     gui.update_gui_images(&app.instance, &app.device, &mut app.data, &output)?;
                     gui.update_gui_mesh(
                         &app.instance,
@@ -85,7 +102,7 @@ impl VulkanData {
     }
 }
 
-impl Default for VulkanData {
+impl Default for WinitWrapper {
     fn default() -> Self {
         Self {
             input_state: Default::default(),
@@ -98,13 +115,13 @@ impl Default for VulkanData {
     }
 }
 
-impl ApplicationHandler for VulkanData {
+impl ApplicationHandler for WinitWrapper {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let (gui_ctx, window) = Gui::get_window_and_ctx(event_loop).unwrap();
         window.request_redraw();
         if self.app.initialized() {
         } else {
-            if let Err(st) = self.run_init(window, event_loop, Some(gui_ctx)) {
+            if let Err(st) = self.init(window, event_loop, Some(gui_ctx)) {
                 error!("{:?}", st);
             }
         }
@@ -165,7 +182,7 @@ impl ApplicationHandler for VulkanData {
             WindowEvent::RedrawRequested => {
                 let window = &self.window.as_ref().unwrap();
                 window.request_redraw();
-                unsafe { app.render(window, self.gui.as_mut().unwrap()) }.unwrap()
+                unsafe { app.render(window, self.gui.as_mut().unwrap(), output) }.unwrap()
             }
             _ =>
                 /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */

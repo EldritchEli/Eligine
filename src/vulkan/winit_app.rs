@@ -84,13 +84,12 @@ impl WinitWrapper {
                     let mut gui = Gui::new(event_loop, ctx, &window, show)?;
                     let output = gui.run_egui_fst(&window);
                     gui.update_gui_images(&app.instance, &app.device, &mut app.data, &output)?;
-                    gui.update_gui_mesh(
+                    gui.init_gui_mesh(
                         &app.instance,
                         &app.device,
                         &mut app.data,
                         &output,
                         pixels_per_point,
-                        None,
                     )?;
                     self.gui = Some(gui);
                 }

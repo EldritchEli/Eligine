@@ -1,5 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use std::collections::HashMap;
+use std::{cmp::max, collections::HashMap};
 
 use egui::{
     ClippedPrimitive, Color32, Context, FullOutput, Rect, RichText, SidePanel, TextureId, Ui,
@@ -28,6 +28,30 @@ pub struct GuiRenderObject {
     pub rect: Rect,
 }
 
+pub unsafe fn update_gui_descriptor_sets(
+    descriptor_sets: &vk::DescriptorSet,
+    map: &HashMap<TextureId, TextureData>,
+    device: &Device,
+    texture_id: &TextureId,
+) -> anyhow::Result<()> {
+    let image_data = map.get(texture_id).unwrap();
+
+    let info = vk::DescriptorImageInfo::builder()
+        .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+        .image_view(image_data.image_view)
+        .sampler(image_data.sampler);
+
+    let image_info = &[info];
+    let sampler_write = vk::WriteDescriptorSet::builder()
+        .dst_set(*descriptor_sets)
+        .dst_binding(1)
+        .dst_array_element(0)
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .image_info(image_info);
+
+    unsafe { device.update_descriptor_sets(&[sampler_write], &[] as &[vk::CopyDescriptorSet]) };
+    Ok(())
+}
 pub unsafe fn create_gui_descriptor_sets(
     map: &HashMap<TextureId, TextureData>,
     device: &Device,
@@ -203,6 +227,8 @@ impl Gui {
                 self.images_to_destroy
                     .push((data.framebuffers.len() as u8, image_data));
                 //if image already exists we need to update it
+                //for now we destroy the old instanc and create a new one
+                //but we can probably figure out a smarter way to do this.
             }
             let texture_data = match &delta.image {
                 egui::ImageData::Color(color_image) => unsafe {
@@ -241,14 +267,14 @@ impl Gui {
     }
 
     //if `image_index` is None then all images per flight will be updated otherwise, only the specified index will be updated
-    pub fn update_gui_mesh(
+    pub unsafe fn update_gui_mesh(
         &mut self,
         instance: &Instance,
         device: &Device,
         data: &mut AppData,
         output: &FullOutput,
         pixels_per_point: f32,
-        image_index: Option<usize>,
+        image_index: usize,
     ) -> anyhow::Result<()> {
         let texture_id: Vec<(TextureId, Rect)> = output
             .clone()
@@ -260,37 +286,89 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        let mut gui_render_objects = vec![];
+        if primitives.len() < self.render_object_length {
+            todo!()
+        }
+        self.render_object_length = primitives.len();
+        for i in 0..self.render_object_length {
+            let (id, rect) = texture_id[i];
+            let (indices, verts) = prim_to_mesh(&primitives[i]);
+            self.render_objects[i].vertex_data[image_index]
+                .update_vertex_data(instance, device, data, verts, indices)?;
+            self.render_objects[i].id = id;
+            self.render_objects[i].rect = rect;
+            /* device.free_descriptor_sets(
+                            data.descriptor_pool,
+                            &[self.render_objects[i].descriptor_sets[image_index]],
+                        )?;
+            */
+            update_gui_descriptor_sets(
+                &self.render_objects[i].descriptor_sets[image_index],
+                &self.image_map,
+                device,
+                &id,
+            )?;
+        }
+
+        for i in self.render_object_length..primitives.len() {
+            let (id, rect) = texture_id[i];
+            let (indices, verts) = prim_to_mesh(&primitives[i]);
+            let mut vertex_data = Vec::with_capacity(data.framebuffers.len());
+            vertex_data[image_index] = unsafe {
+                VertexData::create_vertex_data(instance, device, data, verts.to_owned(), indices)
+            }?;
+            self.render_objects.push(GuiRenderObject {
+                vertex_data,
+                descriptor_sets: unsafe {
+                    create_gui_descriptor_sets(&self.image_map, device, data, &id)
+                }?,
+                id,
+                rect,
+            });
+        }
+        self.render_object_length = max(primitives.len(), self.render_object_length);
+        Ok(())
+    }
+
+    pub fn init_gui_mesh(
+        &mut self,
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        output: &FullOutput,
+        pixels_per_point: f32,
+    ) -> anyhow::Result<()> {
+        let texture_id: Vec<(TextureId, Rect)> = output
+            .clone()
+            .shapes
+            .iter()
+            .map(|s| (s.shape.texture_id(), s.clip_rect))
+            .collect();
+        let primitives = self
+            .egui_state
+            .egui_ctx()
+            .tessellate(output.shapes.clone(), pixels_per_point);
+        if primitives.len() < self.render_object_length {
+            todo!()
+        }
+        let mut gui_render_objects = Vec::with_capacity(primitives.len());
         self.render_object_length = primitives.len();
         for i in 0..primitives.len() {
             let prim = &primitives[i];
             let (id, rect) = texture_id[i];
             let (indices, verts) = prim_to_mesh(prim);
             let mut vertex_data = vec![];
-            if let Some(image_index) = image_index {
-                vertex_data[image_index] = unsafe {
+
+            for _ in 0..data.framebuffers.len() {
+                vertex_data.push(unsafe {
                     VertexData::create_vertex_data(
                         instance,
                         device,
                         data,
                         verts.to_owned(),
-                        indices,
+                        indices.clone(),
                     )
-                }?;
-            } else {
-                vertex_data.clear();
-                for _ in 0..data.framebuffers.len() {
-                    println!("pushing gui verts");
-                    vertex_data.push(unsafe {
-                        VertexData::create_vertex_data(
-                            instance,
-                            device,
-                            data,
-                            verts.to_owned(),
-                            indices.clone(),
-                        )
-                    }?);
-                }
+                }?);
             }
             gui_render_objects.push(GuiRenderObject {
                 vertex_data,
@@ -301,6 +379,7 @@ impl Gui {
                 rect,
             });
         }
+        self.render_object_length = gui_render_objects.len();
         self.render_objects = gui_render_objects;
         Ok(())
     }
@@ -344,5 +423,21 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
             if ui.button("battypatpat").clicked() {
                 println!("goodbye");
             };
+            let alternatives = ["a", "b", "c", "d"];
+            let mut selected = 2;
+            egui::ComboBox::from_label("Select one!").show_index(
+                ui,
+                &mut selected,
+                alternatives.len(),
+                |i| alternatives[i],
+            );
+            let alternatives = ["a", "b", "c", "d"];
+            let mut selected = 2;
+            egui::ComboBox::from_label("Select two!").show_index(
+                ui,
+                &mut selected,
+                alternatives.len(),
+                |i| alternatives[i],
+            );
         });
 }

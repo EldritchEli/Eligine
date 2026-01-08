@@ -98,7 +98,6 @@ where
         indices: Vec<u32>,
     ) -> Result<()> {
         self.update_vertex_buffer(instance, device, data, vertices)?;
-
         self.update_index_buffer(instance, device, data, indices)?;
         Ok(())
     }
@@ -238,6 +237,7 @@ where
         indices: Vec<u32>,
     ) -> Result<UpdateResult> {
         if indices.len() > self.indices.len() {
+            println!("hello");
             //new index buffer won't fit the already allocated one so we need to recreate it
             device.destroy_buffer(self.index_buffer, None);
             device.free_memory(self.index_buffer_memory, None);

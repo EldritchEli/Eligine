@@ -24,6 +24,7 @@ use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
 use egui::FullOutput;
+use log::info;
 use std::f32::consts::PI;
 use std::path::Path;
 use std::time::Instant;
@@ -183,13 +184,12 @@ impl App {
     }
 
     unsafe fn recreate_swapchain(&mut self, window: &Window, gui: &mut Gui) -> anyhow::Result<()> {
-        println!("recreated swap");
+        info!("recreated swapchain");
         self.device.device_wait_idle()?;
         self.destroy_swapchain();
         create_swapchain(window, &self.instance, &self.device, &mut self.data)?;
         create_swapchain_image_views(&self.device, &mut self.data)?;
         create_render_pass(&self.instance, &self.device, &mut self.data)?;
-        //mock_render_pass(&self.instance, &self.device, &mut self.data)?;
 
         skybox_pipeline(&self.device, &mut self.data, 2)?;
         create_pbr_pipeline(&self.device, &mut self.data, 1)?;
@@ -352,6 +352,15 @@ impl App {
             gui.egui_state.egui_ctx().pixels_per_point(),
             Some(image_index),
         )?;*/
+        gui.update_gui_images(&self.instance, &self.device, &mut self.data, &egui_output)?;
+        gui.update_gui_mesh(
+            &self.instance,
+            &self.device,
+            &mut self.data,
+            &egui_output,
+            gui.egui_state.egui_ctx().pixels_per_point(),
+            image_index,
+        )?;
         self.update_uniform_buffer(image_index, window)?;
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];

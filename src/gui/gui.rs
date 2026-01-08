@@ -22,8 +22,8 @@ use crate::vulkan::{
 #[derive(Debug, Clone)]
 pub struct GuiRenderObject {
     //one for each framebuffer
-    pub vertex_data: Vec<VertexData<VertexGui>>,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
+    pub vertex_data: VertexData<VertexGui>,
+    pub descriptor_sets: vk::DescriptorSet,
     pub id: TextureId,
     pub rect: Rect,
 }
@@ -57,14 +57,14 @@ pub unsafe fn create_gui_descriptor_sets(
     device: &Device,
     data: &AppData,
     texture_id: &TextureId,
-) -> anyhow::Result<Vec<vk::DescriptorSet>> {
+) -> anyhow::Result<vk::DescriptorSet> {
     info!("gui descriptor");
-    let layouts = vec![data.gui_descriptor_layout; data.swapchain_images.len()];
+    let layouts = vec![data.gui_descriptor_layout; 1];
     let info = vk::DescriptorSetAllocateInfo::builder()
         .descriptor_pool(data.descriptor_pool)
         .set_layouts(&layouts);
 
-    let descriptor_sets = device.allocate_descriptor_sets(&info)?;
+    let descriptor_set = *device.allocate_descriptor_sets(&info)?.first().unwrap();
     for i in 0..data.swapchain_images.len() {
         let info = vk::DescriptorBufferInfo::builder()
             .buffer(data.global_buffer[i])
@@ -73,7 +73,7 @@ pub unsafe fn create_gui_descriptor_sets(
 
         let buffer_info = &[info];
         let ubo_write = vk::WriteDescriptorSet::builder()
-            .dst_set(descriptor_sets[i])
+            .dst_set(descriptor_set)
             .dst_binding(0)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -87,7 +87,7 @@ pub unsafe fn create_gui_descriptor_sets(
 
         let image_info = &[info];
         let sampler_write = vk::WriteDescriptorSet::builder()
-            .dst_set(descriptor_sets[i])
+            .dst_set(descriptor_set)
             .dst_binding(1)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -101,11 +101,10 @@ pub unsafe fn create_gui_descriptor_sets(
         };
     }
 
-    Ok(descriptor_sets)
+    Ok(descriptor_set)
 }
 pub struct Gui {
-    pub render_objects: Vec<GuiRenderObject>,
-    pub render_object_length: usize,
+    pub render_objects: Vec<Vec<GuiRenderObject>>,
     pub image_map: HashMap<TextureId, TextureData>,
     // let images go through all framebuffers before removing, to all images to be removed are not being used
     pub images_to_destroy: Vec<(u8, TextureData)>,
@@ -157,7 +156,6 @@ impl Gui {
         );
         Ok(Self {
             render_objects: vec![],
-            render_object_length: 0,
             image_map: HashMap::new(),
             images_to_destroy: vec![],
             egui_state,
@@ -204,11 +202,11 @@ impl Gui {
             data.destroy_image(device);
         }
         for v in &self.render_objects {
-            for v in &v.vertex_data {
-                device.free_memory(v.vertex_buffer_memory, None);
-                device.destroy_buffer(v.vertex_buffer, None);
-                device.free_memory(v.index_buffer_memory, None);
-                device.destroy_buffer(v.index_buffer, None);
+            for v in v {
+                device.free_memory(v.vertex_data.vertex_buffer_memory, None);
+                device.destroy_buffer(v.vertex_data.vertex_buffer, None);
+                device.free_memory(v.vertex_data.index_buffer_memory, None);
+                device.destroy_buffer(v.vertex_data.index_buffer, None);
             }
         }
     }
@@ -276,6 +274,7 @@ impl Gui {
         pixels_per_point: f32,
         image_index: usize,
     ) -> anyhow::Result<()> {
+        let render_objects = &mut self.render_objects[image_index];
         let texture_id: Vec<(TextureId, Rect)> = output
             .clone()
             .shapes
@@ -286,38 +285,37 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        if primitives.len() < self.render_object_length {
-            todo!()
+        if primitives.len() < render_objects.len() {
+            for obj in render_objects.drain(primitives.len()..) {
+                device.destroy_buffer(obj.vertex_data.vertex_buffer, None);
+                device.destroy_buffer(obj.vertex_data.index_buffer, None);
+                device.free_memory(obj.vertex_data.vertex_buffer_memory, None);
+                device.free_memory(obj.vertex_data.index_buffer_memory, None);
+                device.free_descriptor_sets(data.descriptor_pool, &[obj.descriptor_sets])?;
+            }
         }
-        self.render_object_length = primitives.len();
-        for i in 0..self.render_object_length {
+        for i in 0..render_objects.len() {
             let (id, rect) = texture_id[i];
             let (indices, verts) = prim_to_mesh(&primitives[i]);
-            self.render_objects[i].vertex_data[image_index]
+            render_objects[i]
+                .vertex_data
                 .update_vertex_data(instance, device, data, verts, indices)?;
-            self.render_objects[i].id = id;
-            self.render_objects[i].rect = rect;
-            /* device.free_descriptor_sets(
-                            data.descriptor_pool,
-                            &[self.render_objects[i].descriptor_sets[image_index]],
-                        )?;
-            */
-            update_gui_descriptor_sets(
-                &self.render_objects[i].descriptor_sets[image_index],
-                &self.image_map,
-                device,
-                &id,
-            )?;
+            render_objects[i].id = id;
+            render_objects[i].rect = rect;
+            device
+                .free_descriptor_sets(data.descriptor_pool, &[render_objects[i].descriptor_sets])?;
+
+            render_objects[i].descriptor_sets =
+                create_gui_descriptor_sets(&self.image_map, device, data, &id)?;
         }
 
-        for i in self.render_object_length..primitives.len() {
+        for i in render_objects.len()..primitives.len() {
             let (id, rect) = texture_id[i];
             let (indices, verts) = prim_to_mesh(&primitives[i]);
-            let mut vertex_data = Vec::with_capacity(data.framebuffers.len());
-            vertex_data[image_index] = unsafe {
+            let vertex_data = unsafe {
                 VertexData::create_vertex_data(instance, device, data, verts.to_owned(), indices)
             }?;
-            self.render_objects.push(GuiRenderObject {
+            self.render_objects[image_index].push(GuiRenderObject {
                 vertex_data,
                 descriptor_sets: unsafe {
                     create_gui_descriptor_sets(&self.image_map, device, data, &id)
@@ -326,7 +324,6 @@ impl Gui {
                 rect,
             });
         }
-        self.render_object_length = max(primitives.len(), self.render_object_length);
         Ok(())
     }
 
@@ -348,19 +345,13 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        if primitives.len() < self.render_object_length {
-            todo!()
-        }
-        let mut gui_render_objects = Vec::with_capacity(primitives.len());
-        self.render_object_length = primitives.len();
-        for i in 0..primitives.len() {
-            let prim = &primitives[i];
-            let (id, rect) = texture_id[i];
-            let (indices, verts) = prim_to_mesh(prim);
-            let mut vertex_data = vec![];
-
-            for _ in 0..data.framebuffers.len() {
-                vertex_data.push(unsafe {
+        for image_index in 0..data.framebuffers.len() {
+            let mut gui_render_objects = Vec::with_capacity(primitives.len());
+            for i in 0..primitives.len() {
+                let prim = &primitives[i];
+                let (id, rect) = texture_id[i];
+                let (indices, verts) = prim_to_mesh(prim);
+                let vertex_data = unsafe {
                     VertexData::create_vertex_data(
                         instance,
                         device,
@@ -368,19 +359,18 @@ impl Gui {
                         verts.to_owned(),
                         indices.clone(),
                     )
-                }?);
+                }?;
+                gui_render_objects.push(GuiRenderObject {
+                    vertex_data,
+                    descriptor_sets: unsafe {
+                        create_gui_descriptor_sets(&self.image_map, device, data, &id)
+                    }?,
+                    id,
+                    rect,
+                });
             }
-            gui_render_objects.push(GuiRenderObject {
-                vertex_data,
-                descriptor_sets: unsafe {
-                    create_gui_descriptor_sets(&self.image_map, device, data, &id)
-                }?,
-                id,
-                rect,
-            });
+            self.render_objects.push(gui_render_objects)
         }
-        self.render_object_length = gui_render_objects.len();
-        self.render_objects = gui_render_objects;
         Ok(())
     }
 }
@@ -439,5 +429,25 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
                 alternatives.len(),
                 |i| alternatives[i],
             );
+            egui::ComboBox::from_id_salt("my-combobox")
+                .selected_text("text")
+                .icon(filled_triangle)
+                .show_ui(ui, |_ui| {});
         });
+}
+pub fn filled_triangle(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    visuals: &egui::style::WidgetVisuals,
+    _is_open: bool,
+) {
+    let rect = egui::Rect::from_center_size(
+        rect.center(),
+        egui::vec2(rect.width() * 0.6, rect.height() * 0.4),
+    );
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![rect.left_top(), rect.right_top(), rect.center_bottom()],
+        visuals.fg_stroke.color,
+        visuals.fg_stroke,
+    ));
 }

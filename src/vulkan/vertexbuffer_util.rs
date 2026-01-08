@@ -97,6 +97,23 @@ where
         vertices: Vec<V>,
         indices: Vec<u32>,
     ) -> Result<()> {
+        if vertices.len() > self.vertices.len() {
+            device.destroy_buffer(self.vertex_buffer, None);
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
+            device.free_memory(self.vertex_buffer_memory, None);
+            let (vertex_buffer, vertex_buffer_memory) =
+                Self::create_vertex_buffer(instance, device, data, &vertices)?;
+            let (index_buffer, index_buffer_memory) =
+                Self::create_index_buffer(instance, device, data, &indices)?;
+            self.vertex_buffer = vertex_buffer;
+            self.index_buffer = index_buffer;
+            self.vertex_buffer_memory = vertex_buffer_memory;
+            self.index_buffer_memory = index_buffer_memory;
+            self.vertices = vertices;
+            self.indices = indices;
+            return Ok(());
+        }
         self.update_vertex_buffer(instance, device, data, vertices)?;
         self.update_index_buffer(instance, device, data, indices)?;
         Ok(())
@@ -149,18 +166,8 @@ where
         device: &Device,
         data: &mut AppData,
         vertices: Vec<V>,
-    ) -> Result<UpdateResult> {
-        if vertices.len() > self.vertices.len() {
-            //new index buffer won't fit the already allocated one so we need to recreate it
-            device.destroy_buffer(self.index_buffer, None);
-            device.free_memory(self.index_buffer_memory, None);
-            let (buffer, memory) = Self::create_vertex_buffer(instance, device, data, &vertices)?;
-            self.vertex_buffer = buffer;
-            self.vertex_buffer_memory = memory;
-            self.vertices = vertices;
-            return Ok(UpdateResult::NewAllocation(buffer, memory));
-        }
-        let size = (size_of::<V>() * vertices.len()/*VERTICES.len()*/) as u64;
+    ) -> Result<()> {
+        let size = (size_of::<V>() * vertices.len()) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -186,7 +193,7 @@ where
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
 
-        Ok(UpdateResult::SameAllocation)
+        Ok(())
     }
 
     pub unsafe fn create_index_buffer(
@@ -195,7 +202,7 @@ where
         data: &mut AppData,
         indices: &Vec<u32>,
     ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let size = (size_of::<u32>() * indices.len()/*INDICES.len()*/) as u64;
+        let size = (size_of::<u32>() * indices.len()) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -235,19 +242,8 @@ where
         device: &Device,
         data: &mut AppData,
         indices: Vec<u32>,
-    ) -> Result<UpdateResult> {
-        if indices.len() > self.indices.len() {
-            println!("hello");
-            //new index buffer won't fit the already allocated one so we need to recreate it
-            device.destroy_buffer(self.index_buffer, None);
-            device.free_memory(self.index_buffer_memory, None);
-            let (buffer, memory) = Self::create_index_buffer(instance, device, data, &indices)?;
-            self.index_buffer = buffer;
-            self.index_buffer_memory = memory;
-            self.indices = indices;
-            return Ok(UpdateResult::NewAllocation(buffer, memory));
-        }
-        let size = (size_of::<u32>() * indices.len()/*INDICES.len()*/) as u64;
+    ) -> Result<()> {
+        let size = (size_of::<u32>() * indices.len()) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -270,7 +266,7 @@ where
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
 
-        Ok(UpdateResult::SameAllocation)
+        Ok(())
     }
 }
 

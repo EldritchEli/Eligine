@@ -221,9 +221,15 @@ impl App {
                 object,
             )?;
         }
-        for v in &mut gui.render_objects {
-            v.descriptor_sets =
-                create_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, &v.id)?;
+        for objects in &mut gui.render_objects {
+            for object in objects {
+                object.descriptor_sets = create_gui_descriptor_sets(
+                    &gui.image_map,
+                    &self.device,
+                    &self.data,
+                    &object.id,
+                )?;
+            }
         }
 
         create_command_buffers(
@@ -342,16 +348,7 @@ impl App {
         }
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
-        //self.update_descriptor_sets(image_index)?;
-        /*  gui.update_gui_images(&self.instance, &self.device, &mut self.data, &egui_output)?;
-        gui.update_gui_mesh(
-            &self.instance,
-            &self.device,
-            &mut self.data,
-            &egui_output,
-            gui.egui_state.egui_ctx().pixels_per_point(),
-            Some(image_index),
-        )?;*/
+        gui.cleanup_garbage(&self.device);
         gui.update_gui_images(&self.instance, &self.device, &mut self.data, &egui_output)?;
         gui.update_gui_mesh(
             &self.instance,
@@ -461,12 +458,16 @@ impl App {
             .image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        for v in &gui.render_objects {
-            for v_data in &v.vertex_data {
-                self.device.free_memory(v_data.vertex_buffer_memory, None);
-                self.device.destroy_buffer(v_data.vertex_buffer, None);
-                self.device.free_memory(v_data.index_buffer_memory, None);
-                self.device.destroy_buffer(v_data.index_buffer, None);
+        for objects in &gui.render_objects {
+            for object in objects {
+                self.device
+                    .free_memory(object.vertex_data.vertex_buffer_memory, None);
+                self.device
+                    .destroy_buffer(object.vertex_data.vertex_buffer, None);
+                self.device
+                    .free_memory(object.vertex_data.index_buffer_memory, None);
+                self.device
+                    .destroy_buffer(object.vertex_data.index_buffer, None);
             }
         }
         for (_i, object) in self.scene.render_objects.iter() {

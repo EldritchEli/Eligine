@@ -80,82 +80,68 @@ pub unsafe fn create_command_buffer(
             vk::PipelineBindPoint::GRAPHICS,
             data.gui_pipeline,
         );
-        let descriptor_set = &gui.render_objects.first().unwrap().descriptor_sets;
-        if !descriptor_set.is_empty() {
+
+        device.cmd_push_constants(
+            *command_buffer,
+            data.pbr_pipeline_layout,
+            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            0,
+            &data.pbr_push_contant.data(),
+        );
+        for object in &gui.render_objects[i] {
+            device.cmd_bind_vertex_buffers(
+                *command_buffer,
+                0,
+                &[object.vertex_data.vertex_buffer],
+                &[0],
+            );
+            device.cmd_bind_index_buffer(
+                *command_buffer,
+                object.vertex_data.index_buffer,
+                0,
+                vk::IndexType::UINT32,
+            );
             device.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 data.gui_pipeline_layout,
                 0,
-                &[descriptor_set[i]],
+                &[object.descriptor_sets],
                 &[],
             );
-            //device.cmd_draw(*command_buffer, 4, 1, 0, 0);
-
-            let mut vertex_data = gui.render_objects.clone();
-            vertex_data.reverse();
-            device.cmd_push_constants(
+            let Rect { mut min, mut max } = object.rect;
+            let scale = window.scale_factor() as f32;
+            min.x *= scale;
+            min.y *= scale;
+            max.x *= scale;
+            max.y *= scale;
+            device.cmd_set_scissor(
                 *command_buffer,
-                data.pbr_pipeline_layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
-                &data.pbr_push_contant.data(),
+                &[vk::Rect2D::builder()
+                    .offset(
+                        vk::Offset2D::builder()
+                            .x(min.x.round() as i32)
+                            .y(min.y.round() as i32)
+                            .build(),
+                    )
+                    .extent(
+                        vk::Extent2D::builder()
+                            .width((max.x.round() - min.x) as u32)
+                            .height((max.y.round() - min.y) as u32)
+                            .build(),
+                    )
+                    .build()],
             );
-            for object in vertex_data {
-                device.cmd_bind_vertex_buffers(
-                    *command_buffer,
-                    0,
-                    &[object.vertex_data[i].vertex_buffer],
-                    &[0],
-                );
-                device.cmd_bind_index_buffer(
-                    *command_buffer,
-                    object.vertex_data[i].index_buffer,
-                    0,
-                    vk::IndexType::UINT32,
-                );
-                device.cmd_bind_descriptor_sets(
-                    *command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    data.gui_pipeline_layout,
-                    0,
-                    &[object.descriptor_sets[i]],
-                    &[],
-                );
-                let Rect { mut min, mut max } = object.rect;
-                let scale = window.scale_factor() as f32;
-                min.x *= scale;
-                min.y *= scale;
-                max.x *= scale;
-                max.y *= scale;
-                device.cmd_set_scissor(
-                    *command_buffer,
-                    0,
-                    &[vk::Rect2D::builder()
-                        .offset(
-                            vk::Offset2D::builder()
-                                .x(min.x.round() as i32)
-                                .y(min.y.round() as i32)
-                                .build(),
-                        )
-                        .extent(
-                            vk::Extent2D::builder()
-                                .width((max.x.round() - min.x) as u32)
-                                .height((max.y.round() - min.y) as u32)
-                                .build(),
-                        )
-                        .build()],
-                );
 
-                device.cmd_draw_indexed(
-                    *command_buffer,
-                    object.vertex_data[i].indices.len() as u32,
-                    1,
-                    0,
-                    0,
-                    0,
-                );
-            }
+            device.cmd_draw_indexed(
+                *command_buffer,
+                object.vertex_data.indices.len() as u32,
+                1,
+                0,
+                0,
+                0,
+            );
         }
     }
 

@@ -169,7 +169,7 @@ impl Gui {
         event: &winit::event::WindowEvent,
     ) -> FullOutput {
         // Each frame:
-        let _response = self.egui_state.on_window_event(window, event);
+        //let _response = self.egui_state.on_window_event(window, event);
         let input = self.egui_state.take_egui_input(window);
 
         self.egui_state.egui_ctx().begin_pass(input);
@@ -185,7 +185,7 @@ impl Gui {
     }
 
     pub fn run_egui_fst(&mut self, window: &window::Window) -> FullOutput {
-        let input = egui::RawInput::default();
+        let input = self.egui_state.take_egui_input(window);
 
         self.egui_state.egui_ctx().begin_pass(input);
         egui::CentralPanel::default()
@@ -221,6 +221,7 @@ impl Gui {
         let image_delta = &output.textures_delta;
 
         for (id, delta) in &image_delta.set {
+            println!("gui images: {:?}", self.image_map.len());
             if let Some(image_data) = self.image_map.remove(id) {
                 self.images_to_destroy
                     .push((data.framebuffers.len() as u8, image_data));
@@ -285,16 +286,16 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        if primitives.len() < render_objects.len() {
-            for obj in render_objects.drain(primitives.len()..) {
-                device.destroy_buffer(obj.vertex_data.vertex_buffer, None);
-                device.destroy_buffer(obj.vertex_data.index_buffer, None);
-                device.free_memory(obj.vertex_data.vertex_buffer_memory, None);
-                device.free_memory(obj.vertex_data.index_buffer_memory, None);
-                device.free_descriptor_sets(data.descriptor_pool, &[obj.descriptor_sets])?;
-            }
+        // if primitives.len() < render_objects.len() {
+        for obj in render_objects.drain(0..) {
+            device.destroy_buffer(obj.vertex_data.vertex_buffer, None);
+            device.destroy_buffer(obj.vertex_data.index_buffer, None);
+            device.free_memory(obj.vertex_data.vertex_buffer_memory, None);
+            device.free_memory(obj.vertex_data.index_buffer_memory, None);
+            device.free_descriptor_sets(data.descriptor_pool, &[obj.descriptor_sets])?;
         }
-        for i in 0..render_objects.len() {
+        //  }
+        /*for i in 0..render_objects.len() {
             let (id, rect) = texture_id[i];
             let (indices, verts) = prim_to_mesh(&primitives[i]);
             render_objects[i]
@@ -307,9 +308,9 @@ impl Gui {
 
             render_objects[i].descriptor_sets =
                 create_gui_descriptor_sets(&self.image_map, device, data, &id)?;
-        }
+        }*/
 
-        for i in render_objects.len()..primitives.len() {
+        for i in 0..primitives.len() {
             let (id, rect) = texture_id[i];
             let (indices, verts) = prim_to_mesh(&primitives[i]);
             let vertex_data = unsafe {
@@ -377,16 +378,20 @@ impl Gui {
 pub fn prim_to_mesh(prim: &ClippedPrimitive) -> (Vec<u32>, Vec<VertexGui>) {
     match &prim.primitive {
         epaint::Primitive::Mesh(mesh) => {
+            println!("new mesh");
             let vertices: Vec<VertexGui> = mesh
                 .vertices
                 .iter()
-                .map(|v| VertexGui {
-                    pos: Vec2 {
-                        x: v.pos.x,
-                        y: v.pos.y,
-                    },
-                    uv: Vec2::new(v.uv.x, v.uv.y),
-                    color: U8Vec4::new(v.color.r(), v.color.g(), v.color.b(), v.color.a()),
+                .map(|v| {
+                    dbg!(v);
+                    VertexGui {
+                        pos: Vec2 {
+                            x: v.pos.x,
+                            y: v.pos.y,
+                        },
+                        uv: Vec2::new(v.uv.x, v.uv.y),
+                        color: U8Vec4::new(v.color.r(), v.color.g(), v.color.b(), v.color.a()),
+                    }
                 })
                 .collect();
             (mesh.indices.clone(), vertices)
@@ -398,11 +403,7 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
     SidePanel::new(egui::panel::Side::Left, "my panel ")
         .default_width(200.0)
         .show(ctx, |ui| {
-            ui.label(
-                RichText::new("Hello egui! IM home you dummy, and so it goes lalalalla")
-                    .color(egui::Color32::RED)
-                    .size(28.0),
-            );
+            ui.label(RichText::new("A").color(egui::Color32::RED).size(156.0));
 
             if ui
                 .add(egui::Button::new("Click me").fill(Color32::YELLOW))

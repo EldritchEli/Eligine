@@ -88,6 +88,7 @@ pub unsafe fn create_command_buffer(
             0,
             &data.pbr_push_contant.data(),
         );
+
         for object in &gui.render_objects[i] {
             device.cmd_bind_vertex_buffers(
                 *command_buffer,

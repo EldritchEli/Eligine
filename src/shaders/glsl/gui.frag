@@ -26,6 +26,7 @@ void main() {
 	// If your skybox is a cubemap
     outColor =  texture(texSampler,fragCoord);
     outColor *= fragColor;
+   //outColor = fragColor;
     //outColor = vec4(outColor.w);
 }
 

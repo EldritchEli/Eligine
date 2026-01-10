@@ -1,5 +1,5 @@
 use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
-use glam::{I8Vec2, Vec2, vec2};
+use glam::{Vec2, vec2};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
@@ -77,9 +77,9 @@ pub struct InputState {
 impl InputState {}
 
 impl InputState {
-    pub(crate) fn new() -> Self {
+    /*pub(crate) fn new() -> Self {
         Self::default()
-    }
+    }*/
     pub fn set_mouse_delta(&mut self, event: &WindowEvent) {
         if let WindowEvent::CursorMoved { position, .. } = event {
             self.mouse_delta = vec2(

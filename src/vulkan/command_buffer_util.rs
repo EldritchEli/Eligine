@@ -15,6 +15,13 @@ pub unsafe fn create_command_buffers(
     gui: Option<&Gui>,
 ) -> anyhow::Result<()> {
     for i in 0..data.framebuffers.len() {
+        let command_center = &mut data.command_centers[i];
+        let allocate_info = vk::CommandBufferAllocateInfo::builder()
+            .command_pool(command_center.command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        command_center.command_buffers = device.allocate_command_buffers(&allocate_info)?;
+        assert_eq!(command_center.command_buffers.len(), 1);
         create_command_buffer(device, scene, data, window, gui, i)?;
     }
     Ok(())
@@ -28,14 +35,8 @@ pub unsafe fn create_command_buffer(
     gui: Option<&Gui>,
     i: usize,
 ) -> anyhow::Result<()> {
-    let command_center = &mut data.command_centers[i];
-    let allocate_info = vk::CommandBufferAllocateInfo::builder()
-        .command_pool(command_center.command_pool)
-        .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(1);
-    command_center.command_buffers = device.allocate_command_buffers(&allocate_info)?;
-    assert_eq!(command_center.command_buffers.len(), 1);
-    let command_buffer = &command_center.command_buffers[0];
+    let command_buffer = &data.command_centers[i].command_buffers[0];
+    device.reset_command_buffer(*command_buffer, vk::CommandBufferResetFlags::empty())?;
     let inheritance = vk::CommandBufferInheritanceInfo::builder();
 
     let info = vk::CommandBufferBeginInfo::builder()

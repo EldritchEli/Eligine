@@ -1,9 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use std::collections::HashMap;
 
-use egui::{
-    ClippedPrimitive, Color32, Context, FullOutput, Rect, RichText, SidePanel, TextureId, Ui,
-};
+use egui::{ClippedPrimitive, Color32, FullOutput, Rect, RichText, SidePanel, TextureId, Ui};
 use glam::{U8Vec4, Vec2};
 use log::info;
 use vulkanalia::{
@@ -109,8 +107,6 @@ pub struct Gui {
     // let images go through all framebuffers before removing, to all images to be removed are not being used
     pub images_to_destroy: Vec<(u8, TextureData)>,
     pub egui_state: egui_winit::State,
-    ///what should be presented when running the app
-    pub show: fn(&Context, &mut Ui),
 }
 
 impl std::fmt::Debug for Gui {
@@ -143,7 +139,6 @@ impl Gui {
         event_loop: &winit::event_loop::ActiveEventLoop,
         egui_ctx: egui::Context,
         window: &window::Window,
-        show: fn(&Context, &mut Ui),
     ) -> anyhow::Result<Self> {
         let viewport_id = egui_ctx.viewport_id();
         let egui_state = egui_winit::State::new(
@@ -159,7 +154,6 @@ impl Gui {
             image_map: HashMap::new(),
             images_to_destroy: vec![],
             egui_state,
-            show,
         })
     }
 
@@ -170,16 +164,7 @@ impl Gui {
     ) -> FullOutput {
         // Each frame:
         let _response = self.egui_state.on_window_event(window, event);
-        let input = self.egui_state.take_egui_input(window);
-
-        self.egui_state.egui_ctx().begin_pass(input);
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new())
-            .show(self.egui_state.egui_ctx(), |ui| {
-                (self.show)(self.egui_state.egui_ctx(), ui)
-            });
-
-        self.egui_state.egui_ctx().end_pass()
+        self.run_egui_fst(window)
 
         // handle full_output
     }
@@ -191,7 +176,7 @@ impl Gui {
         egui::CentralPanel::default()
             .frame(egui::Frame::new())
             .show(self.egui_state.egui_ctx(), |ui| {
-                (self.show)(self.egui_state.egui_ctx(), ui)
+                show(self.render_objects.len(), self.egui_state.egui_ctx(), ui)
             });
         self.egui_state.egui_ctx().end_pass()
 
@@ -219,8 +204,8 @@ impl Gui {
         output: &FullOutput,
     ) -> anyhow::Result<()> {
         let image_delta = &output.textures_delta;
-
         for (id, delta) in &image_delta.set {
+            println!("image set");
             if let Some(image_data) = self.image_map.remove(id) {
                 self.images_to_destroy
                     .push((data.framebuffers.len() as u8, image_data));
@@ -228,6 +213,7 @@ impl Gui {
                 //for now we destroy the old instanc and create a new one
                 //but we can probably figure out a smarter way to do this.
             }
+
             let texture_data = match &delta.image {
                 egui::ImageData::Color(color_image) => unsafe {
                     TextureData::create_gui_texture(
@@ -243,6 +229,7 @@ impl Gui {
         }
 
         for id in &image_delta.free {
+            println!("image free");
             self.images_to_destroy.push((
                 data.framebuffers.len() as u8,
                 self.image_map.remove(id).unwrap(),
@@ -275,7 +262,6 @@ impl Gui {
         image_index: usize,
     ) -> anyhow::Result<()> {
         let render_objects = &mut self.render_objects[image_index];
-        println!("render_object length: {:?}", render_objects.len());
         let texture_id: Vec<(TextureId, Rect)> = output
             .clone()
             .shapes
@@ -309,11 +295,17 @@ impl Gui {
                 .update_vertex_data(instance, device, data, verts, indices)?;
             render_objects[i].id = id;
             render_objects[i].rect = rect;
-            device
-                .free_descriptor_sets(data.descriptor_pool, &[render_objects[i].descriptor_set])?;
-
-            render_objects[i].descriptor_set =
-                create_gui_descriptor_sets(&self.image_map, device, data, &id)?;
+            /*device
+                            .free_descriptor_sets(data.descriptor_pool, &[render_objects[i].descriptor_set])?;
+            */
+            update_gui_descriptor_sets(
+                &render_objects[i].descriptor_set,
+                &self.image_map,
+                device,
+                &id,
+            )?;
+            //    render_objects[i].descriptor_set =
+            //        create_gui_descriptor_sets(&self.image_map, device, data, &id)?;
         }
 
         for i in render_objects.len()..primitives.len() {
@@ -409,7 +401,7 @@ pub fn prim_to_mesh(prim: &ClippedPrimitive) -> (Vec<u32>, Vec<VertexGui>) {
         epaint::Primitive::Callback(_) => todo!(),
     }
 }
-pub fn show(ctx: &egui::Context, ui: &mut Ui) {
+pub fn show(size: usize, ctx: &egui::Context, ui: &mut Ui) {
     SidePanel::new(egui::panel::Side::Left, "my panel ")
         .default_width(200.0)
         .show(ctx, |ui| {
@@ -418,18 +410,26 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
                     .color(egui::Color32::RED)
                     .size(28.0),
             );
-
+            ui.label(
+                RichText::new(format!(
+                    "1234567890render object length scappappa: {}",
+                    size
+                ))
+                .color(egui::Color32::GREEN)
+                .size(18.0),
+            );
             if ui
                 .add(egui::Button::new("Click me sconbbyy snack").fill(Color32::YELLOW))
                 .clicked()
             {
                 println!("hello world");
             };
-            if ui.button("battypatpat").clicked() {
+            if ui.button("1234567890battypatpat").clicked() {
                 println!("goodbye");
             };
             let alternatives = ["a", "b", "c", "d"];
             let mut selected = 2;
+
             egui::ComboBox::from_label("Select one!").show_index(
                 ui,
                 &mut selected,
@@ -444,10 +444,6 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
                 alternatives.len(),
                 |i| format!("scooby one {i}"),
             );
-            egui::ComboBox::from_id_salt("my-combobox")
-                .selected_text("text")
-                .icon(filled_triangle)
-                .show_ui(ui, |_ui| {});
         });
 }
 pub fn filled_triangle(

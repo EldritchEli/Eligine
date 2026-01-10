@@ -362,10 +362,10 @@ impl App {
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        self.device.reset_command_pool(
+        /*self.device.reset_command_pool(
             self.data.command_centers[image_index].command_pool,
             vk::CommandPoolResetFlags::RELEASE_RESOURCES,
-        )?;
+        )?;*/
         create_command_buffer(
             &self.device,
             &mut self.scene,
@@ -385,11 +385,13 @@ impl App {
         self.device
             .reset_fences(&[self.data.in_flight_fences[self.frame]])?;
 
-        self.device.queue_submit(
-            self.data.graphics_queue,
-            &[submit_info],
-            self.data.in_flight_fences[self.frame],
-        )?;
+        self.device
+            .queue_submit(
+                self.data.graphics_queue,
+                &[submit_info],
+                self.data.in_flight_fences[self.frame],
+            )
+            .unwrap();
 
         let swapchains = &[self.data.swapchain];
         let image_indices = &[image_index as u32];
@@ -468,6 +470,16 @@ impl App {
                     .free_memory(object.vertex_data.index_buffer_memory, None);
                 self.device
                     .destroy_buffer(object.vertex_data.index_buffer, None);
+                if let Some(staging_map) = &object.vertex_data.mem_map {
+                    self.device
+                        .free_memory(staging_map.index.staging_memory, None);
+                    self.device
+                        .destroy_buffer(staging_map.index.staging_buffer, None);
+                    self.device
+                        .free_memory(staging_map.vertex.staging_memory, None);
+                    self.device
+                        .destroy_buffer(staging_map.vertex.staging_buffer, None);
+                }
             }
         }
         for (_i, object) in self.scene.render_objects.iter() {

@@ -3,16 +3,14 @@ use crate::game_objects::skybox::SkyBox;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::uniform_buffer_object::OrthographicLight;
 use crate::vulkan::vertexbuffer_util::VertexPbr;
-use glam::{Mat4, Vec3};
+use glam::Mat4;
 use slab::{IntoIter, Iter, IterMut, Slab};
 use vulkanalia::vk::{self};
 
-use std::f32::consts::PI;
 use std::marker::PhantomData;
 
 use crate::game_objects::render_object::{ObjectId, RenderId, RenderObject};
 use crate::game_objects::transform::Transform;
-use tobj::Material;
 
 pub trait IsId: Copy {
     fn get_id(&self) -> usize;
@@ -116,7 +114,6 @@ pub struct Scene {
     pub(crate) camera: Camera,
     pub render_objects: RenderSlab,
     pub objects: ObjectSlab,
-    materials: Vec<Material>,
     pub skybox: Option<SkyBox>,
     pub sun: Sun,
 }
@@ -176,7 +173,6 @@ impl Default for Scene {
             camera: Camera::default(),
             render_objects: ParaSlab::new(),
             objects: ParaSlab::new(),
-            materials: Vec::default(),
             skybox: None,
             sun: Sun::default(),
         }

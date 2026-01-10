@@ -164,6 +164,7 @@ where
         }
         self.update_vertex_buffer(instance, device, data, vertices)?;
         self.update_index_buffer(instance, device, data, indices)?;
+
         Ok(())
     }
     pub unsafe fn create_vertex_buffer(
@@ -317,8 +318,9 @@ where
             data,
             index.staging_buffer,
             self.index_buffer,
-            index.size,
+            4 * indices.len() as u64,
         )?;
+        self.indices = indices;
 
         Ok(())
     }

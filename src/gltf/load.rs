@@ -137,7 +137,7 @@ fn load_node(
             };
 
             let vertex_data = unsafe {
-                VertexData::create_vertex_data(instance, device, data, vertices, indices)
+                VertexData::create_vertex_data(instance, device, data, vertices, indices, false)
             }
             .map_err(OneOf::new)?;
             let texture_data = unsafe {
@@ -278,7 +278,7 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
 /// turns images with type r8g8b8 to r8g8b8a8.
 fn interleave_alpha_channel(rgbs: &Vec<u8>, alpha_val: u8) -> Vec<u8> {
     let a = alpha_val;
-    let mut rgbas: Vec<u8> = Vec::with_capacity(rgbs.len() * (1 / 3));
+    let mut rgbas: Vec<u8> = Vec::with_capacity(rgbs.len() * (1 / 3) as usize);
     let mut count = 0;
     for b in rgbs.iter() {
         rgbas.push(b.clone());

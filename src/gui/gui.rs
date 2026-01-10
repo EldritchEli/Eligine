@@ -1,5 +1,5 @@
-#![allow(unsafe_op_in_unsafe_fn)]
-use std::{cmp::max, collections::HashMap};
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
+use std::collections::HashMap;
 
 use egui::{
     ClippedPrimitive, Color32, Context, FullOutput, Rect, RichText, SidePanel, TextureId, Ui,
@@ -176,7 +176,7 @@ impl Gui {
         egui::CentralPanel::default()
             .frame(egui::Frame::new())
             .show(self.egui_state.egui_ctx(), |ui| {
-                (self.show)(&self.egui_state.egui_ctx(), ui)
+                (self.show)(self.egui_state.egui_ctx(), ui)
             });
 
         self.egui_state.egui_ctx().end_pass()
@@ -191,7 +191,7 @@ impl Gui {
         egui::CentralPanel::default()
             .frame(egui::Frame::new())
             .show(self.egui_state.egui_ctx(), |ui| {
-                (self.show)(&self.egui_state.egui_ctx(), ui)
+                (self.show)(self.egui_state.egui_ctx(), ui)
             });
         self.egui_state.egui_ctx().end_pass()
 
@@ -275,6 +275,7 @@ impl Gui {
         image_index: usize,
     ) -> anyhow::Result<()> {
         let render_objects = &mut self.render_objects[image_index];
+        println!("render_object length: {:?}", render_objects.len());
         let texture_id: Vec<(TextureId, Rect)> = output
             .clone()
             .shapes
@@ -286,12 +287,18 @@ impl Gui {
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
         if primitives.len() < render_objects.len() {
-            for obj in render_objects.drain(primitives.len() - 1..) {
+            for obj in render_objects.drain(primitives.len()..) {
                 device.destroy_buffer(obj.vertex_data.vertex_buffer, None);
                 device.destroy_buffer(obj.vertex_data.index_buffer, None);
                 device.free_memory(obj.vertex_data.vertex_buffer_memory, None);
                 device.free_memory(obj.vertex_data.index_buffer_memory, None);
                 device.free_descriptor_sets(data.descriptor_pool, &[obj.descriptor_set])?;
+                let map = obj.vertex_data.mem_map.unwrap();
+
+                device.destroy_buffer(map.index.staging_buffer, None);
+                device.destroy_buffer(map.vertex.staging_buffer, None);
+                device.free_memory(map.index.staging_memory, None);
+                device.free_memory(map.vertex.staging_memory, None);
             }
         }
         for i in 0..render_objects.len() {
@@ -313,7 +320,14 @@ impl Gui {
             let (id, rect) = texture_id[i];
             let (indices, verts) = prim_to_mesh(&primitives[i]);
             let vertex_data = unsafe {
-                VertexData::create_vertex_data(instance, device, data, verts.to_owned(), indices)
+                VertexData::create_vertex_data(
+                    instance,
+                    device,
+                    data,
+                    verts.to_owned(),
+                    indices,
+                    true,
+                )
             }?;
             self.render_objects[image_index].push(GuiRenderObject {
                 vertex_data,
@@ -358,6 +372,7 @@ impl Gui {
                         data,
                         verts.to_owned(),
                         indices.clone(),
+                        true,
                     )
                 }?;
                 gui_render_objects.push(GuiRenderObject {
@@ -405,7 +420,7 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
             );
 
             if ui
-                .add(egui::Button::new("Click me").fill(Color32::YELLOW))
+                .add(egui::Button::new("Click me sconbbyy snack").fill(Color32::YELLOW))
                 .clicked()
             {
                 println!("hello world");
@@ -421,13 +436,13 @@ pub fn show(ctx: &egui::Context, ui: &mut Ui) {
                 alternatives.len(),
                 |i| alternatives[i],
             );
-            let alternatives = ["a", "b", "c", "d"];
+            let alternatives = ["a", "b", "cidd", "scooby snack", "ekka", "e"];
             let mut selected = 2;
             egui::ComboBox::from_label("Select two!").show_index(
                 ui,
                 &mut selected,
                 alternatives.len(),
-                |i| alternatives[i],
+                |i| format!("scooby one {i}"),
             );
             egui::ComboBox::from_id_salt("my-combobox")
                 .selected_text("text")

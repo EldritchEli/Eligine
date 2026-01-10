@@ -1,10 +1,10 @@
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use anyhow::Result;
 use std::mem::size_of;
 
 use crate::vulkan::buffer_util::{copy_buffer, create_buffer};
 use crate::vulkan::render_app::AppData;
-use glam::{U8Vec4, Vec2, Vec3, Vec4, vec3};
+use glam::{U8Vec4, Vec2, Vec3, vec3};
 use std::ptr::copy_nonoverlapping as memcpy;
 use varlen_macro::define_varlen;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
@@ -50,7 +50,19 @@ pub unsafe fn quad_vertex_data(
         },
     ];
     let indices = vec![0, 2, 1, 1, 2, 3];
-    unsafe { VertexData::create_vertex_data(instance, device, data, vertices, indices) }
+    unsafe { VertexData::create_vertex_data(instance, device, data, vertices, indices, false) }
+}
+#[derive(Clone, Debug, Default)]
+pub struct StagingMap {
+    pub mem_pointer: *mut std::ffi::c_void,
+    pub staging_memory: vk::DeviceMemory,
+    pub staging_buffer: vk::Buffer,
+    pub size: u64,
+}
+#[derive(Clone, Debug, Default)]
+pub struct VertexStagingMap {
+    pub vertex: StagingMap,
+    pub index: StagingMap,
 }
 #[derive(Clone, Debug, Default)]
 pub struct VertexData<V>
@@ -63,6 +75,7 @@ where
     pub vertex_buffer_memory: vk::DeviceMemory,
     pub index_buffer: vk::Buffer,
     pub index_buffer_memory: vk::DeviceMemory,
+    pub mem_map: Option<VertexStagingMap>,
 }
 
 impl<V> VertexData<V>
@@ -75,19 +88,33 @@ where
         data: &mut AppData,
         vertices: Vec<V>,
         indices: Vec<u32>,
+        has_map: bool,
     ) -> Result<Self> {
-        let (vertex_buffer, vertex_buffer_memory) =
-            unsafe { Self::create_vertex_buffer(instance, device, data, &vertices) }?;
-        let (index_buffer, index_buffer_memory) =
-            unsafe { Self::create_index_buffer(instance, device, data, &indices) }?;
-        Ok(VertexData {
-            vertices,
-            indices,
-            vertex_buffer,
-            vertex_buffer_memory,
-            index_buffer,
-            index_buffer_memory,
-        })
+        let (vertex_buffer, vertex_buffer_memory, vertex_mem_map) =
+            unsafe { Self::create_vertex_buffer(instance, device, data, &vertices, has_map) }?;
+        let (index_buffer, index_buffer_memory, index_mem_map) =
+            unsafe { Self::create_index_buffer(instance, device, data, &indices, has_map) }?;
+        match (vertex_mem_map, index_mem_map) {
+            (Some(vertex), Some(index)) => Ok(VertexData {
+                vertices,
+                indices,
+                vertex_buffer,
+                vertex_buffer_memory,
+                index_buffer,
+                index_buffer_memory,
+                mem_map: Some(VertexStagingMap { vertex, index }),
+            }),
+            (None, None) => Ok(VertexData {
+                vertices,
+                indices,
+                vertex_buffer,
+                vertex_buffer_memory,
+                index_buffer,
+                index_buffer_memory,
+                mem_map: None,
+            }),
+            _ => panic!("undefined match"),
+        }
     }
     pub unsafe fn update_vertex_data(
         &mut self,
@@ -102,16 +129,37 @@ where
             device.destroy_buffer(self.index_buffer, None);
             device.free_memory(self.index_buffer_memory, None);
             device.free_memory(self.vertex_buffer_memory, None);
-            let (vertex_buffer, vertex_buffer_memory) =
-                Self::create_vertex_buffer(instance, device, data, &vertices)?;
-            let (index_buffer, index_buffer_memory) =
-                Self::create_index_buffer(instance, device, data, &indices)?;
+            if let Some(staging_map) = &self.mem_map {
+                device.destroy_buffer(staging_map.vertex.staging_buffer, None);
+                device.destroy_buffer(staging_map.index.staging_buffer, None);
+                device.free_memory(staging_map.vertex.staging_memory, None);
+                device.free_memory(staging_map.index.staging_memory, None);
+            }
+            let (vertex_buffer, vertex_buffer_memory, vertex_mem) = Self::create_vertex_buffer(
+                instance,
+                device,
+                data,
+                &vertices,
+                self.mem_map.is_some(),
+            )?;
+            let (index_buffer, index_buffer_memory, index_mem) = Self::create_index_buffer(
+                instance,
+                device,
+                data,
+                &indices,
+                self.mem_map.is_some(),
+            )?;
             self.vertex_buffer = vertex_buffer;
             self.vertex_buffer_memory = vertex_buffer_memory;
             self.vertices = vertices;
             self.index_buffer = index_buffer;
             self.index_buffer_memory = index_buffer_memory;
             self.indices = indices;
+            if let Some(index) = index_mem
+                && let Some(vertex) = vertex_mem
+            {
+                self.mem_map = Some(VertexStagingMap { vertex, index })
+            }
             return Ok(());
         }
         self.update_vertex_buffer(instance, device, data, vertices)?;
@@ -122,9 +170,10 @@ where
         instance: &Instance,
         device: &Device,
         data: &mut AppData,
-        vertices: &Vec<V>,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let size = (size_of::<V>() * vertices.len()/*VERTICES.len()*/) as u64;
+        vertices: &[V],
+        has_map: bool,
+    ) -> Result<(vk::Buffer, vk::DeviceMemory, Option<StagingMap>)> {
+        let size = std::mem::size_of_val(vertices) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
             instance,
@@ -138,13 +187,11 @@ where
         let memory =
             device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
 
-        memcpy(
-            vertices.as_ptr(), /*VERTICES.as_ptr()*/
-            memory.cast(),
-            vertices.len(),
-        );
+        memcpy(vertices.as_ptr(), memory.cast(), vertices.len());
 
-        device.unmap_memory(staging_buffer_memory);
+        if !has_map {
+            device.unmap_memory(staging_buffer_memory);
+        }
 
         let (vertex_buffer, vertex_buffer_memory) = create_buffer(
             instance,
@@ -155,10 +202,20 @@ where
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
         copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
-        device.destroy_buffer(staging_buffer, None);
-        device.free_memory(staging_buffer_memory, None);
+        if has_map {
+            let mem_map = Some(StagingMap {
+                mem_pointer: memory,
+                staging_memory: staging_buffer_memory,
+                staging_buffer,
+                size,
+            });
+            Ok((vertex_buffer, vertex_buffer_memory, mem_map))
+        } else {
+            device.destroy_buffer(staging_buffer, None);
+            device.free_memory(staging_buffer_memory, None);
 
-        Ok((vertex_buffer, vertex_buffer_memory))
+            Ok((vertex_buffer, vertex_buffer_memory, None))
+        }
     }
     pub unsafe fn update_vertex_buffer(
         &mut self,
@@ -167,31 +224,23 @@ where
         data: &mut AppData,
         vertices: Vec<V>,
     ) -> Result<()> {
-        let size = (size_of::<V>() * vertices.len()) as u64;
-
-        let (staging_buffer, staging_buffer_memory) = create_buffer(
-            instance,
-            device,
-            data,
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
-        )?;
-
-        let memory =
-            device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+        let Some(VertexStagingMap { vertex, index }) = &self.mem_map else {
+            panic!("updating vertex buffer for unmapped memory is still undefined")
+        };
 
         memcpy(
             vertices.as_ptr(), /*VERTICES.as_ptr()*/
-            memory.cast(),
+            vertex.mem_pointer.cast(),
             vertices.len(),
         );
 
-        device.unmap_memory(staging_buffer_memory);
-
-        copy_buffer(device, data, staging_buffer, self.vertex_buffer, size)?;
-        device.destroy_buffer(staging_buffer, None);
-        device.free_memory(staging_buffer_memory, None);
+        copy_buffer(
+            device,
+            data,
+            vertex.staging_buffer,
+            self.vertex_buffer,
+            vertex.size,
+        )?;
 
         Ok(())
     }
@@ -201,7 +250,8 @@ where
         device: &Device,
         data: &mut AppData,
         indices: &Vec<u32>,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
+        has_map: bool,
+    ) -> Result<(vk::Buffer, vk::DeviceMemory, Option<StagingMap>)> {
         let size = (size_of::<u32>() * indices.len()) as u64;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
@@ -217,9 +267,9 @@ where
             device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
 
         memcpy(indices.as_ptr(), memory.cast(), indices.len());
-
-        device.unmap_memory(staging_buffer_memory);
-
+        if !has_map {
+            device.unmap_memory(staging_buffer_memory);
+        }
         let (index_buffer, index_buffer_memory) = create_buffer(
             instance,
             device,
@@ -230,11 +280,20 @@ where
         )?;
 
         copy_buffer(device, data, staging_buffer, index_buffer, size)?;
+        if has_map {
+            let mem_map = Some(StagingMap {
+                mem_pointer: memory,
+                staging_memory: staging_buffer_memory,
+                staging_buffer,
+                size,
+            });
+            Ok((index_buffer, index_buffer_memory, mem_map))
+        } else {
+            device.destroy_buffer(staging_buffer, None);
+            device.free_memory(staging_buffer_memory, None);
 
-        device.destroy_buffer(staging_buffer, None);
-        device.free_memory(staging_buffer_memory, None);
-
-        Ok((index_buffer, index_buffer_memory))
+            Ok((index_buffer, index_buffer_memory, None))
+        }
     }
     pub unsafe fn update_index_buffer(
         &mut self,
@@ -243,28 +302,23 @@ where
         data: &mut AppData,
         indices: Vec<u32>,
     ) -> Result<()> {
-        let size = (size_of::<u32>() * indices.len()) as u64;
+        let Some(VertexStagingMap { vertex: _, index }) = &self.mem_map else {
+            panic!("updating vertex buffer for unmapped memory is still undefined")
+        };
 
-        let (staging_buffer, staging_buffer_memory) = create_buffer(
-            instance,
+        memcpy(
+            indices.as_ptr(), /*VERTICES.as_ptr()*/
+            index.mem_pointer.cast(),
+            indices.len(),
+        );
+
+        copy_buffer(
             device,
             data,
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+            index.staging_buffer,
+            self.index_buffer,
+            index.size,
         )?;
-
-        let memory =
-            device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
-
-        memcpy(indices.as_ptr(), memory.cast(), indices.len());
-
-        device.unmap_memory(staging_buffer_memory);
-
-        copy_buffer(device, data, staging_buffer, self.index_buffer, size)?;
-
-        device.destroy_buffer(staging_buffer, None);
-        device.free_memory(staging_buffer_memory, None);
 
         Ok(())
     }

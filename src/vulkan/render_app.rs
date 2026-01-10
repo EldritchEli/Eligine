@@ -191,6 +191,7 @@ impl App {
         create_swapchain_image_views(&self.device, &mut self.data)?;
         create_render_pass(&self.instance, &self.device, &mut self.data)?;
 
+        create_descriptor_pool(&self.device, &mut self.data, 30)?;
         skybox_pipeline(&self.device, &mut self.data, 2)?;
         create_pbr_pipeline(&self.device, &mut self.data, 1)?;
         gui_pipeline(&self.device, &mut self.data, 0)?;
@@ -198,7 +199,6 @@ impl App {
         create_color_objects(&self.instance, &self.device, &mut self.data)?;
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
-        create_descriptor_pool(&self.device, &mut self.data, 30)?;
         create_global_buffers(
             &self.instance,
             &self.device,
@@ -490,7 +490,6 @@ impl App {
             .destroy_command_pool(self.data.single_time_pool, None);
         self.device
             .destroy_command_pool(self.data.transient_command_pool, None);
-
         self.device.destroy_device(None);
         self.instance.destroy_surface_khr(self.data.surface, None);
         if VALIDATION_ENABLED {

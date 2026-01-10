@@ -106,7 +106,7 @@ pub unsafe fn create_command_buffer(
                 vk::PipelineBindPoint::GRAPHICS,
                 data.gui_pipeline_layout,
                 0,
-                &[object.descriptor_sets],
+                &[object.descriptor_set],
                 &[],
             );
             let Rect { mut min, mut max } = object.rect;

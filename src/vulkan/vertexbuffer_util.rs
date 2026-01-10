@@ -97,7 +97,7 @@ where
         vertices: Vec<V>,
         indices: Vec<u32>,
     ) -> Result<()> {
-        if vertices.len() > self.vertices.len() {
+        if vertices.len() > self.vertices.len() || indices.len() > self.indices.len() {
             device.destroy_buffer(self.vertex_buffer, None);
             device.destroy_buffer(self.index_buffer, None);
             device.free_memory(self.index_buffer_memory, None);
@@ -107,10 +107,10 @@ where
             let (index_buffer, index_buffer_memory) =
                 Self::create_index_buffer(instance, device, data, &indices)?;
             self.vertex_buffer = vertex_buffer;
-            self.index_buffer = index_buffer;
             self.vertex_buffer_memory = vertex_buffer_memory;
-            self.index_buffer_memory = index_buffer_memory;
             self.vertices = vertices;
+            self.index_buffer = index_buffer;
+            self.index_buffer_memory = index_buffer_memory;
             self.indices = indices;
             return Ok(());
         }

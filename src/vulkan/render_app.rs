@@ -223,7 +223,7 @@ impl App {
         }
         for objects in &mut gui.render_objects {
             for object in objects {
-                object.descriptor_sets = create_gui_descriptor_sets(
+                object.descriptor_set = create_gui_descriptor_sets(
                     &gui.image_map,
                     &self.device,
                     &self.data,

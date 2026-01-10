@@ -23,7 +23,7 @@ use crate::vulkan::{
 pub struct GuiRenderObject {
     //one for each framebuffer
     pub vertex_data: VertexData<VertexGui>,
-    pub descriptor_sets: vk::DescriptorSet,
+    pub descriptor_set: vk::DescriptorSet,
     pub id: TextureId,
     pub rect: Rect,
 }
@@ -174,7 +174,7 @@ impl Gui {
 
         self.egui_state.egui_ctx().begin_pass(input);
         egui::CentralPanel::default()
-            .frame(egui::Frame::none())
+            .frame(egui::Frame::new())
             .show(self.egui_state.egui_ctx(), |ui| {
                 (self.show)(&self.egui_state.egui_ctx(), ui)
             });
@@ -185,11 +185,11 @@ impl Gui {
     }
 
     pub fn run_egui_fst(&mut self, window: &window::Window) -> FullOutput {
-        let input = egui::RawInput::default();
+        let input = self.egui_state.take_egui_input(window);
 
         self.egui_state.egui_ctx().begin_pass(input);
         egui::CentralPanel::default()
-            .frame(egui::Frame::none())
+            .frame(egui::Frame::new())
             .show(self.egui_state.egui_ctx(), |ui| {
                 (self.show)(&self.egui_state.egui_ctx(), ui)
             });
@@ -286,12 +286,12 @@ impl Gui {
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
         if primitives.len() < render_objects.len() {
-            for obj in render_objects.drain(primitives.len()..) {
+            for obj in render_objects.drain(primitives.len() - 1..) {
                 device.destroy_buffer(obj.vertex_data.vertex_buffer, None);
                 device.destroy_buffer(obj.vertex_data.index_buffer, None);
                 device.free_memory(obj.vertex_data.vertex_buffer_memory, None);
                 device.free_memory(obj.vertex_data.index_buffer_memory, None);
-                device.free_descriptor_sets(data.descriptor_pool, &[obj.descriptor_sets])?;
+                device.free_descriptor_sets(data.descriptor_pool, &[obj.descriptor_set])?;
             }
         }
         for i in 0..render_objects.len() {
@@ -303,9 +303,9 @@ impl Gui {
             render_objects[i].id = id;
             render_objects[i].rect = rect;
             device
-                .free_descriptor_sets(data.descriptor_pool, &[render_objects[i].descriptor_sets])?;
+                .free_descriptor_sets(data.descriptor_pool, &[render_objects[i].descriptor_set])?;
 
-            render_objects[i].descriptor_sets =
+            render_objects[i].descriptor_set =
                 create_gui_descriptor_sets(&self.image_map, device, data, &id)?;
         }
 
@@ -317,7 +317,7 @@ impl Gui {
             }?;
             self.render_objects[image_index].push(GuiRenderObject {
                 vertex_data,
-                descriptor_sets: unsafe {
+                descriptor_set: unsafe {
                     create_gui_descriptor_sets(&self.image_map, device, data, &id)
                 }?,
                 id,
@@ -362,7 +362,7 @@ impl Gui {
                 }?;
                 gui_render_objects.push(GuiRenderObject {
                     vertex_data,
-                    descriptor_sets: unsafe {
+                    descriptor_set: unsafe {
                         create_gui_descriptor_sets(&self.image_map, device, data, &id)
                     }?,
                     id,

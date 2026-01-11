@@ -1,7 +1,11 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use std::collections::HashMap;
 
-use egui::{ClippedPrimitive, Color32, FullOutput, Rect, RichText, SidePanel, TextureId, Ui};
+use egui::{
+    ClippedPrimitive, Color32, FullOutput, RawInput, Rect, RichText, SidePanel, TextureId,
+    TexturesDelta, Ui, ViewportInfo,
+};
+use epaint::ImageDelta;
 use glam::{U8Vec4, Vec2};
 use log::info;
 use vulkanalia::{
@@ -107,6 +111,8 @@ pub struct Gui {
     // let images go through all framebuffers before removing, to all images to be removed are not being used
     pub images_to_destroy: Vec<(u8, TextureData)>,
     pub egui_state: egui_winit::State,
+    pub viewport_info: Option<ViewportInfo>,
+    pub new_texture_delta: Vec<TexturesDelta>,
 }
 
 impl std::fmt::Debug for Gui {
@@ -154,6 +160,8 @@ impl Gui {
             image_map: HashMap::new(),
             images_to_destroy: vec![],
             egui_state,
+            viewport_info: None,
+            new_texture_delta: vec![],
         })
     }
 
@@ -163,7 +171,10 @@ impl Gui {
         event: &winit::event::WindowEvent,
     ) -> FullOutput {
         // Each frame:
-        let _response = self.egui_state.on_window_event(window, event);
+        let response = self.egui_state.on_window_event(window, event);
+        let viewport_info = self.viewport_info.as_mut().unwrap();
+
+        egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
         self.run_egui_fst(window)
 
         // handle full_output
@@ -171,14 +182,14 @@ impl Gui {
 
     pub fn run_egui_fst(&mut self, window: &window::Window) -> FullOutput {
         let input = self.egui_state.take_egui_input(window);
-
-        self.egui_state.egui_ctx().begin_pass(input);
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new())
-            .show(self.egui_state.egui_ctx(), |ui| {
-                show(self.render_objects.len(), self.egui_state.egui_ctx(), ui)
-            });
-        self.egui_state.egui_ctx().end_pass()
+        if self.viewport_info.is_none() {
+            self.viewport_info = Some(input.viewport().clone())
+        }
+        self.egui_state.egui_ctx().run(input, |ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new())
+                .show(ctx, |ui| show(self.render_objects.len(), ctx, ui));
+        })
 
         // handle full_output
     }
@@ -201,31 +212,59 @@ impl Gui {
         instance: &Instance,
         device: &Device,
         data: &mut AppData,
-        output: &FullOutput,
+        image_delta: TexturesDelta,
     ) -> anyhow::Result<()> {
-        let image_delta = &output.textures_delta;
+        if !image_delta.is_empty() {
+            println!("image delta is not empty");
+        }
         for (id, delta) in &image_delta.set {
+            if delta.is_whole() {
+                println!("delta is whole");
+            } else {
+                println!("delta is partial")
+            }
+
             println!("image set");
-            if let Some(image_data) = self.image_map.remove(id) {
+            if delta.is_whole()
+                && let Some(image_data) = self.image_map.remove(id)
+            {
+                println!("removing old atlas");
                 self.images_to_destroy
                     .push((data.framebuffers.len() as u8, image_data));
                 //if image already exists we need to update it
                 //for now we destroy the old instanc and create a new one
                 //but we can probably figure out a smarter way to do this.
             }
-
-            let texture_data = match &delta.image {
-                egui::ImageData::Color(color_image) => unsafe {
-                    TextureData::create_gui_texture(
+            if !delta.is_whole()
+                && let Some(old_image_data) = self.image_map.get(id)
+                && let Some([x, y]) = delta.pos
+            {
+                println!("patching atlas");
+                let egui::ImageData::Color(color_image) = &delta.image;
+                unsafe {
+                    old_image_data.patch_image(
                         instance,
                         device,
                         data,
                         Vec::from(color_image.as_raw()),
                         (color_image.size[0] as u32, color_image.size[1] as u32),
+                        (x as i32, y as i32),
                     )?
-                },
-            };
-            let insert = self.image_map.insert(*id, texture_data);
+                };
+            } else {
+                let texture_data = match &delta.image {
+                    egui::ImageData::Color(color_image) => unsafe {
+                        TextureData::create_gui_texture(
+                            instance,
+                            device,
+                            data,
+                            Vec::from(color_image.as_raw()),
+                            (color_image.size[0] as u32, color_image.size[1] as u32),
+                        )?
+                    },
+                };
+                let insert = self.image_map.insert(*id, texture_data);
+            }
         }
 
         for id in &image_delta.free {
@@ -437,7 +476,7 @@ pub fn show(size: usize, ctx: &egui::Context, ui: &mut Ui) {
                 |i| alternatives[i],
             );
             let alternatives = ["a", "b", "cidd", "scooby snack", "ekka", "e"];
-            let mut selected = 2;
+            let mut selected = 1;
             egui::ComboBox::from_label("Select two!").show_index(
                 ui,
                 &mut selected,

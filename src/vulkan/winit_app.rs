@@ -83,7 +83,12 @@ impl WinitWrapper {
                     let pixels_per_point = ctx.pixels_per_point();
                     let mut gui = Gui::new(event_loop, ctx, &window)?;
                     let output = gui.run_egui_fst(&window);
-                    gui.update_gui_images(&app.instance, &app.device, &mut app.data, &output)?;
+                    gui.update_gui_images(
+                        &app.instance,
+                        &app.device,
+                        &mut app.data,
+                        output.textures_delta.clone(),
+                    )?;
                     gui.init_gui_mesh(
                         &app.instance,
                         &app.device,
@@ -146,6 +151,10 @@ impl ApplicationHandler for WinitWrapper {
         app.time_stamp = elapsed;
         let gui = self.gui.as_mut().unwrap();
         let output = gui.run_egui(self.window.as_ref().unwrap(), &event);
+        if !output.textures_delta.is_empty() {
+            println!("new texture delta");
+            gui.new_texture_delta.push(output.textures_delta.clone())
+        }
         self.input_state.read_event(&event);
 
         app.scene.update(dt, &self.input_state);

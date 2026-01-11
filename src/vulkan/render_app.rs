@@ -23,7 +23,8 @@ use crate::vulkan::uniform_buffer_object::{
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
-use egui::FullOutput;
+use bevy::render::render_resource::binding_types::texture_2d_multisampled;
+use egui::{FullOutput, TexturesDelta};
 use log::info;
 use std::f32::consts::PI;
 use std::path::Path;
@@ -349,7 +350,14 @@ impl App {
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
         gui.cleanup_garbage(&self.device);
-        gui.update_gui_images(&self.instance, &self.device, &mut self.data, &egui_output)?;
+        if !gui.new_texture_delta.is_empty() {
+            let texture_deltas: Vec<TexturesDelta> = gui.new_texture_delta.drain(0..).collect();
+            texture_deltas.into_iter().for_each(|t| {
+                gui.update_gui_images(&self.instance, &self.device, &mut self.data, t)
+                    .unwrap();
+            });
+            assert!(gui.new_texture_delta.is_empty());
+        }
         gui.update_gui_mesh(
             &self.instance,
             &self.device,
@@ -362,10 +370,6 @@ impl App {
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        /*self.device.reset_command_pool(
-            self.data.command_centers[image_index].command_pool,
-            vk::CommandPoolResetFlags::RELEASE_RESOURCES,
-        )?;*/
         create_command_buffer(
             &self.device,
             &mut self.scene,

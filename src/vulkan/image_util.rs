@@ -22,6 +22,75 @@ pub struct TextureData {
 }
 
 impl TextureData {
+    pub unsafe fn patch_image(
+        &self,
+        instance: &Instance,
+        device: &Device,
+        data: &mut AppData,
+        pixels: Vec<u8>,
+        size: (u32, u32),
+        offset: (i32, i32),
+    ) -> anyhow::Result<()> {
+        let (width, height) = size;
+        let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
+        let (staging_buffer, staging_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            pixels.len() as u64,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+
+        let memory = device.map_memory(
+            staging_buffer_memory,
+            0,
+            pixels.len() as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
+        memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
+
+        device.unmap_memory(staging_buffer_memory);
+
+        //texture_image_memory;
+
+        transition_image_layout(
+            device,
+            data,
+            self.image,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            mip_levels,
+            1,
+        )?;
+
+        copy_buffer_to_image(
+            device,
+            data,
+            staging_buffer,
+            self.image,
+            width,
+            height,
+            1,
+            Some(offset),
+        )?;
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+
+        generate_mipmaps(
+            instance,
+            device,
+            data,
+            self.image,
+            vk::Format::R8G8B8A8_SRGB,
+            width,
+            height,
+            1,
+            mip_levels,
+        )?;
+        Ok(())
+    }
     pub unsafe fn destroy_image(&self, device: &Device) {
         device.destroy_sampler(self.sampler, None);
         device.destroy_image_view(self.image_view, None);
@@ -178,90 +247,7 @@ impl TextureData {
             width,
             height,
             1,
-        )?;
-        device.destroy_buffer(staging_buffer, None);
-        device.free_memory(staging_buffer_memory, None);
-
-        generate_mipmaps(
-            instance,
-            device,
-            data,
-            texture_image,
-            vk::Format::R8G8B8A8_SRGB,
-            width,
-            height,
-            1,
-            mip_levels,
-        )?;
-        Ok((mip_levels, texture_image, texture_image_memory))
-    }
-
-    pub unsafe fn update_texture_image(
-        instance: &Instance,
-        device: &Device,
-        data: &mut AppData,
-        pixels: Vec<u8>,
-        size: (u32, u32, u32),
-    ) -> Result<(u32, vk::Image, vk::DeviceMemory)> {
-        let (width, height, depth) = size;
-        let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
-        let (staging_buffer, staging_buffer_memory) = create_buffer(
-            instance,
-            device,
-            data,
-            pixels.len() as u64,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
-        )?;
-
-        let memory = device.map_memory(
-            staging_buffer_memory,
-            0,
-            pixels.len() as u64,
-            vk::MemoryMapFlags::empty(),
-        )?;
-        memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
-
-        device.unmap_memory(staging_buffer_memory);
-
-        let (texture_image, texture_image_memory) = create_image(
-            instance,
-            device,
-            data,
-            width,
-            height,
-            depth,
-            mip_levels,
-            vk::SampleCountFlags::_1,
-            vk::Format::R8G8B8A8_SRGB,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::SAMPLED
-                | vk::ImageUsageFlags::TRANSFER_DST
-                | vk::ImageUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        )?;
-        //texture_image;
-        //texture_image_memory;
-
-        transition_image_layout(
-            device,
-            data,
-            texture_image,
-            vk::Format::R8G8B8A8_SRGB,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            mip_levels,
-            1,
-        )?;
-
-        copy_buffer_to_image(
-            device,
-            data,
-            staging_buffer,
-            texture_image,
-            width,
-            height,
-            1,
+            None,
         )?;
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
@@ -407,6 +393,7 @@ impl TextureData {
             width,
             height,
             DEPTH,
+            None,
         )?;
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
@@ -615,29 +602,28 @@ unsafe fn copy_buffer_to_image(
     width: u32,
     height: u32,
     depth: u32,
+    offset: Option<(i32, i32)>,
 ) -> Result<()> {
     let command_buffer = begin_single_time_commands(device, data)?;
     let mut regions = vec![];
-    for i in 0..1 {
-        println!("pass {:?}", i);
-        let subresource = vk::ImageSubresourceLayers::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .mip_level(0)
-            .base_array_layer(i)
-            .layer_count(depth);
-        let region = vk::BufferImageCopy::builder()
-            .buffer_offset((width * height * 4 * i) as u64)
-            .buffer_row_length(width)
-            .buffer_image_height(height)
-            .image_subresource(subresource)
-            .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-            .image_extent(vk::Extent3D {
-                width,
-                height,
-                depth: 1,
-            });
-        regions.push(region);
-    }
+    let subresource = vk::ImageSubresourceLayers::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .mip_level(0)
+        .base_array_layer(0)
+        .layer_count(depth);
+    let (x, y) = offset.unwrap_or((0, 0));
+    let region = vk::BufferImageCopy::builder()
+        .buffer_offset((0) as u64)
+        .buffer_row_length(width)
+        .buffer_image_height(height)
+        .image_subresource(subresource)
+        .image_offset(vk::Offset3D { x, y, z: 0 })
+        .image_extent(vk::Extent3D {
+            width,
+            height,
+            depth: 1,
+        });
+    regions.push(region);
     device.cmd_copy_buffer_to_image(
         command_buffer,
         buffer,
@@ -645,7 +631,6 @@ unsafe fn copy_buffer_to_image(
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         regions.as_slice(),
     );
-    if depth == 6 {}
     end_single_time_commands(device, data, command_buffer)?;
     Ok(())
 }

@@ -2,10 +2,9 @@
 use std::collections::HashMap;
 
 use egui::{
-    ClippedPrimitive, Color32, FullOutput, RawInput, Rect, RichText, SidePanel, TextureId,
-    TexturesDelta, Ui, ViewportInfo,
+    ClippedPrimitive, Color32, FullOutput, Rect, RichText, SidePanel, TextureId, TexturesDelta, Ui,
+    ViewportInfo,
 };
-use epaint::ImageDelta;
 use glam::{U8Vec4, Vec2};
 use log::info;
 use vulkanalia::{
@@ -14,11 +13,18 @@ use vulkanalia::{
 };
 use winit::window;
 
-use crate::vulkan::{
-    image_util::TextureData,
-    render_app::AppData,
-    uniform_buffer_object::GlobalUniform,
-    vertexbuffer_util::{VertexData, VertexGui},
+use crate::{
+    game_objects::{render_object::ObjectId, scene::Scene},
+    gui::{
+        gui, menu,
+        objects::{self, selected_object},
+    },
+    vulkan::{
+        image_util::TextureData,
+        render_app::AppData,
+        uniform_buffer_object::GlobalUniform,
+        vertexbuffer_util::{VertexData, VertexGui},
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -167,28 +173,36 @@ impl Gui {
 
     pub fn run_egui(
         &mut self,
+        data: &mut AppData,
+        scene: &mut Scene,
         window: &window::Window,
         event: &winit::event::WindowEvent,
     ) -> FullOutput {
         // Each frame:
-        let response = self.egui_state.on_window_event(window, event);
+        let _response = self.egui_state.on_window_event(window, event);
         let viewport_info = self.viewport_info.as_mut().unwrap();
 
         egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
-        self.run_egui_fst(window)
+        self.run_egui_fst(data, scene, window)
 
         // handle full_output
     }
 
-    pub fn run_egui_fst(&mut self, window: &window::Window) -> FullOutput {
+    pub fn run_egui_fst(
+        &mut self,
+        data: &mut AppData,
+        scene: &mut Scene,
+        window: &window::Window,
+    ) -> FullOutput {
         let input = self.egui_state.take_egui_input(window);
         if self.viewport_info.is_none() {
             self.viewport_info = Some(input.viewport().clone())
         }
         self.egui_state.egui_ctx().run(input, |ctx| {
+            menu::show_menu(ctx);
             egui::CentralPanel::default()
                 .frame(egui::Frame::new())
-                .show(ctx, |ui| show(self.render_objects.len(), ctx, ui));
+                .show(ctx, |ui| show(data, scene, ctx, ui));
         })
 
         // handle full_output
@@ -263,7 +277,7 @@ impl Gui {
                         )?
                     },
                 };
-                let insert = self.image_map.insert(*id, texture_data);
+                let _insert = self.image_map.insert(*id, texture_data);
             }
         }
 
@@ -327,7 +341,8 @@ impl Gui {
             }
         }
         for i in 0..render_objects.len() {
-            let (id, rect) = texture_id[i];
+            let (id, _) = texture_id[i];
+            let rect = primitives[i].clip_rect;
             let (indices, verts) = prim_to_mesh(&primitives[i]);
             render_objects[i]
                 .vertex_data
@@ -348,7 +363,8 @@ impl Gui {
         }
 
         for i in render_objects.len()..primitives.len() {
-            let (id, rect) = texture_id[i];
+            let (id, _) = texture_id[i];
+            let rect = primitives[i].clip_rect;
             let (indices, verts) = prim_to_mesh(&primitives[i]);
             let vertex_data = unsafe {
                 VertexData::create_vertex_data(
@@ -390,11 +406,13 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        for image_index in 0..data.framebuffers.len() {
+        for _ in 0..data.framebuffers.len() {
             let mut gui_render_objects = Vec::with_capacity(primitives.len());
             for i in 0..primitives.len() {
                 let prim = &primitives[i];
-                let (id, rect) = texture_id[i];
+                let rect = prim.clip_rect;
+                let (id, _) = texture_id[i];
+
                 let (indices, verts) = prim_to_mesh(prim);
                 let vertex_data = unsafe {
                     VertexData::create_vertex_data(
@@ -440,9 +458,10 @@ pub fn prim_to_mesh(prim: &ClippedPrimitive) -> (Vec<u32>, Vec<VertexGui>) {
         epaint::Primitive::Callback(_) => todo!(),
     }
 }
-pub fn show(size: usize, ctx: &egui::Context, ui: &mut Ui) {
+pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut Ui) {
     SidePanel::new(egui::panel::Side::Left, "my panel ")
         .default_width(200.0)
+        .min_width(10.0)
         .show(ctx, |ui| {
             ui.label(
                 RichText::new("Hello egui! IM home you dummy, and so it goes lalalalla")
@@ -450,39 +469,37 @@ pub fn show(size: usize, ctx: &egui::Context, ui: &mut Ui) {
                     .size(28.0),
             );
             ui.label(
-                RichText::new(format!(
-                    "1234567890render object length scappappa: {}",
-                    size
-                ))
-                .color(egui::Color32::GREEN)
-                .size(18.0),
+                RichText::new(format!("1234567890render object length scappappa: {}", 5))
+                    .color(egui::Color32::GREEN)
+                    .size(18.0),
             );
-            if ui
-                .add(egui::Button::new("Click me sconbbyy snack").fill(Color32::YELLOW))
-                .clicked()
-            {
-                println!("hello world");
-            };
-            if ui.button("1234567890battypatpat").clicked() {
-                println!("goodbye");
-            };
-            let alternatives = ["a", "b", "c", "d"];
-            let mut selected = 2;
 
-            egui::ComboBox::from_label("Select one!").show_index(
-                ui,
-                &mut selected,
-                alternatives.len(),
-                |i| alternatives[i],
-            );
-            let alternatives = ["a", "b", "cidd", "scooby snack", "ekka", "e"];
-            let mut selected = 1;
-            egui::ComboBox::from_label("Select two!").show_index(
-                ui,
-                &mut selected,
-                alternatives.len(),
-                |i| format!("scooby one {i}"),
-            );
+            objects::show_objects(scene, ctx, ui);
+            ui.separator();
+            ui.label("Camera");
+            ui.horizontal(|ui| {
+                ui.label("Field of view");
+                egui::DragValue::new(&mut scene.camera.fov)
+            });
+            ui.horizontal(|ui| {
+                ui.label("Field of view");
+                ui.add(egui::DragValue::new(&mut scene.camera.fov))
+            });
+            ui.horizontal(|ui| {
+                ui.label("Near field");
+                ui.add(egui::DragValue::new(&mut scene.camera.near_field).speed(0.01))
+            });
+            ui.horizontal(|ui| {
+                ui.label("Far field");
+                ui.add(egui::DragValue::new(&mut scene.camera.far_field))
+            });
+        });
+
+    SidePanel::new(egui::panel::Side::Right, "right panel ")
+        .min_width(100.0)
+        .max_width(200.0)
+        .show(ctx, |ui| {
+            selected_object(scene, ctx, ui);
         });
 }
 pub fn filled_triangle(

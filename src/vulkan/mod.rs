@@ -27,8 +27,8 @@ const VALIDATION_LAYER: vk::ExtensionName =
     vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
-const FAR_PLANE_DISTANCE: f32 = 100000.0;
-const CORRECTION: Mat4 = Mat4::from_cols_array(&[
+pub const FAR_PLANE_DISTANCE: f32 = 100000.0;
+pub const CORRECTION: Mat4 = Mat4::from_cols_array(&[
     1.0,
     0.0,
     0.0,

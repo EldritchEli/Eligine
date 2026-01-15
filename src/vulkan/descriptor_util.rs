@@ -172,7 +172,7 @@ pub unsafe fn create_descriptor_pool(
     let info = vk::DescriptorPoolCreateInfo::builder()
         .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET) //?
         .pool_sizes(pool_sizes)
-        .max_sets(data.swapchain_images.len() as u32 * max_objects);
+        .max_sets(1024);
     data.descriptor_pool = device.create_descriptor_pool(&info, None)?;
     Ok(())
 }

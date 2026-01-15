@@ -87,11 +87,12 @@ where
         self.slab.remove(id.get_id())
     }
 }
-type RenderSlab = ParaSlab<RenderId, RenderObject<VertexPbr>>;
-type ObjectSlab = ParaSlab<ObjectId, GameObject>;
+pub type RenderSlab = ParaSlab<RenderId, RenderObject<VertexPbr>>;
+pub type ObjectSlab = ParaSlab<ObjectId, GameObject>;
 
 #[derive(Debug)]
 pub struct GameObject {
+    pub name: String,
     pub transform: Transform,
     pub parent: Option<ObjectId>,
     pub children: Vec<ObjectId>,
@@ -116,6 +117,7 @@ pub struct Scene {
     pub objects: ObjectSlab,
     pub skybox: Option<SkyBox>,
     pub sun: Sun,
+    pub selected_object: ObjectId,
 }
 impl Scene {
     pub fn update(&mut self, delta: f32, input: &InputState) {
@@ -138,6 +140,7 @@ impl Scene {
         render_object_ids: &Vec<RenderId>,
     ) -> Option<ObjectId> {
         self.insert_instance(GameObject {
+            name: "no name".into(),
             transform,
             children: vec![],
             render_objects: render_object_ids.clone(),
@@ -175,6 +178,7 @@ impl Default for Scene {
             objects: ParaSlab::new(),
             skybox: None,
             sun: Sun::default(),
+            selected_object: ObjectId(0),
         }
     }
 }

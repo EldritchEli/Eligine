@@ -110,30 +110,29 @@ pub unsafe fn create_command_buffer(
                 &[object.descriptor_set],
                 &[],
             );
-            let Rect { mut min, mut max } = object.rect;
+            let Rect { min, max } = object.rect;
             let scale = window.scale_factor() as f32;
-            min.x *= scale;
-            min.y *= scale;
-            max.x *= scale;
-            max.y *= scale;
-            device.cmd_set_scissor(
-                *command_buffer,
-                0,
-                &[vk::Rect2D::builder()
-                    .offset(
-                        vk::Offset2D::builder()
-                            .x(min.x.round() as i32)
-                            .y(min.y.round() as i32)
-                            .build(),
-                    )
-                    .extent(
-                        vk::Extent2D::builder()
-                            .width((max.x.round() - min.x) as u32)
-                            .height((max.y.round() - min.y) as u32)
-                            .build(),
-                    )
-                    .build()],
-            );
+            let ppp = gui.egui_state.egui_ctx().pixels_per_point();
+            let clip_x = ppp * min.x;
+            let clip_y = ppp * min.y;
+            let clip_w = max.x * ppp - clip_x;
+            let clip_h = max.y * ppp - clip_y;
+
+            let scissors = [vk::Rect2D::builder()
+                .offset(
+                    vk::Offset2D::builder()
+                        .x((clip_x as i32).max(0))
+                        .y((clip_y as i32).max(0))
+                        .build(),
+                )
+                .extent(
+                    vk::Extent2D::builder()
+                        .width((clip_w as u32).min(data.swapchain_extent.width))
+                        .height((clip_h as u32).min(data.swapchain_extent.height))
+                        .build(),
+                )
+                .build()];
+            device.cmd_set_scissor(*command_buffer, 0, &scissors);
 
             device.cmd_draw_indexed(
                 *command_buffer,

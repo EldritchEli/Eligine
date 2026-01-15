@@ -20,7 +20,7 @@ fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::Prese
     present_modes
         .iter()
         .cloned()
-        .find(|m| *m == vk::PresentModeKHR::IMMEDIATE) // Immediate seems to work the best
+        .find(|m| *m == vk::PresentModeKHR::MAILBOX) // Immediate seems to work the best
         .unwrap_or(vk::PresentModeKHR::FIFO)
 }
 

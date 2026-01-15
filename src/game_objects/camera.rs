@@ -1,13 +1,19 @@
 use crate::game_objects::transform::Transform;
 use crate::vulkan::input_state::InputState;
-use glam::{Quat, Vec3};
+use crate::vulkan::render_app::AppData;
+use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE};
+use glam::{Mat4, Quat, Vec3};
 use std::cmp::PartialEq;
+use std::f32::consts::PI;
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct Camera {
-    movement_speed: f32,
-    rotation_speed: f32,
-    zoom_speed: f32,
-    fov: f32,
+    pub movement_speed: f32,
+    pub rotation_speed: f32,
+    pub zoom_speed: f32,
+    pub fov: f32,
+    pub near_field: f32,
+    pub far_field: f32,
     pub transform: Transform,
 }
 
@@ -19,6 +25,8 @@ impl Camera {
         rotation_speed: f32,
         zoom_speed: f32,
         fov: f32,
+        near_field: f32,
+        far_field: f32,
     ) -> Self {
         let transform = Transform {
             position,
@@ -31,6 +39,8 @@ impl Camera {
             zoom_speed,
             fov,
             transform,
+            near_field,
+            far_field,
         }
     }
 
@@ -80,9 +90,29 @@ impl Camera {
             self.rotate_xy(mouse_delta.x, mouse_delta.y);
         }
     }
+
+    pub fn projection_matrix(&self, data: &AppData) -> Mat4 {
+        let aspect = data.swapchain_extent.width as f32 / data.swapchain_extent.height as f32;
+        CORRECTION
+            * Mat4::perspective_rh(
+                self.fov * (PI / 180.0),
+                aspect,
+                self.near_field,
+                self.far_field,
+            )
+    }
 }
 impl Default for Camera {
     fn default() -> Self {
-        Self::new(Vec3::ZERO, Vec3::Z, 4.0, 0.025, 1.0, 45.0)
+        Self::new(
+            Vec3::ZERO,
+            Vec3::Z,
+            4.0,
+            0.025,
+            1.0,
+            45.0,
+            0.1,
+            FAR_PLANE_DISTANCE,
+        )
     }
 }

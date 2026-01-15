@@ -23,7 +23,6 @@ use crate::vulkan::uniform_buffer_object::{
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
-use bevy::render::render_resource::binding_types::texture_2d_multisampled;
 use egui::{FullOutput, TexturesDelta};
 use log::info;
 use std::f32::consts::PI;
@@ -250,15 +249,10 @@ impl App {
         window: &Window,
     ) -> anyhow::Result<()> {
         let _time = self.start.elapsed().as_secs_f32();
-        //let gui = &mut self.gui.as_mut().unwrap();
         let view = self.scene.camera.transform.matrix();
 
-        let aspect =
-            self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32;
-        let perspective = Mat4::perspective_rh(PI / 4.0, aspect, 0.1, FAR_PLANE_DISTANCE);
-        let proj = CORRECTION * perspective;
+        let proj = self.scene.camera.projection_matrix(&self.data);
 
-        //let model_rotation: Mat4 = Mat4::from_rotation_y(PI / 4.0 * time);
         self.data.pbr_push_contant = PbrPushConstant {
             proj_inv_view: (view.inverse()),
         };
@@ -295,16 +289,6 @@ impl App {
         memcpy(&self.scene.sun.omnidirectional_light, memory.cast(), 1);
 
         self.device.unmap_memory(self.scene.sun.memory[image_index]);
-        Ok(())
-    }
-    pub unsafe fn update_descriptor_sets(
-        &self,
-        gui: &mut Gui,
-        image_index: usize,
-    ) -> anyhow::Result<()> {
-        for obj in &mut gui.render_objects {
-            // update_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, obj, image_index)?;
-        }
         Ok(())
     }
 

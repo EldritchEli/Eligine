@@ -174,6 +174,7 @@ fn load_node(
         rotation,
     };
     let game_object = GameObject {
+        name: node.name().unwrap_or("unnamed").to_string(),
         transform,
         children: vec![],
         render_objects: render_ids.clone(),

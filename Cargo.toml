@@ -28,4 +28,6 @@ egui = "0.33.2"
 egui-winit = "0.33.2"
 epaint = "0.33.2"
 itertools = "0.14.0"
+mimalloc = "0.1.48"
+either = "1.15.0"
 

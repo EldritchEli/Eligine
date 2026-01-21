@@ -1,6 +1,6 @@
 use crate::game_objects::camera::Camera;
 use crate::game_objects::skybox::SkyBox;
-use crate::vulkan::input_state::InputState;
+use crate::vulkan::input_state::{self, InputState};
 use crate::vulkan::uniform_buffer_object::OrthographicLight;
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use glam::Mat4;

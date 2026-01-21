@@ -1,11 +1,13 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use egui::{
-    ClippedPrimitive, Color32, FullOutput, Rect, RichText, SidePanel, TextureId, TexturesDelta, Ui,
-    ViewportInfo,
+    ClippedPrimitive, Color32, FullOutput, Pos2, Rect, RichText, SidePanel, TextureId,
+    TexturesDelta, Ui, ViewportInfo,
 };
 use glam::{U8Vec4, Vec2};
+use gltf::mesh::util::indices;
+use itertools::Either;
 use log::info;
 use vulkanalia::{
     Device, Instance,
@@ -14,13 +16,14 @@ use vulkanalia::{
 use winit::window;
 
 use crate::{
-    game_objects::{render_object::ObjectId, scene::Scene},
+    game_objects::scene::Scene,
     gui::{
         gui, menu,
         objects::{self, selected_object},
     },
     vulkan::{
         image_util::TextureData,
+        input_state::InputState,
         render_app::AppData,
         uniform_buffer_object::GlobalUniform,
         vertexbuffer_util::{VertexData, VertexGui},
@@ -112,13 +115,14 @@ pub unsafe fn create_gui_descriptor_sets(
     Ok(descriptor_set)
 }
 pub struct Gui {
+    pub enabled: bool,
     pub render_objects: Vec<Vec<GuiRenderObject>>,
     pub image_map: HashMap<TextureId, TextureData>,
     // let images go through all framebuffers before removing, to all images to be removed are not being used
     pub images_to_destroy: Vec<(u8, TextureData)>,
     pub egui_state: egui_winit::State,
     pub viewport_info: Option<ViewportInfo>,
-    pub new_texture_delta: Vec<TexturesDelta>,
+    pub callback: Rect,
 }
 
 impl std::fmt::Debug for Gui {
@@ -136,6 +140,12 @@ impl std::fmt::Debug for Gui {
 }
 
 impl Gui {
+    pub fn set_enabled(&mut self, input: &mut InputState) {
+        if input.f12.is_entered() {
+            println!("gui enabled");
+            self.enabled = !self.enabled;
+        }
+    }
     pub fn get_window_and_ctx(
         event_loop: &winit::event_loop::ActiveEventLoop,
     ) -> anyhow::Result<(egui::Context, window::Window)> {
@@ -162,12 +172,16 @@ impl Gui {
             None,
         );
         Ok(Self {
+            enabled: false,
             render_objects: vec![],
             image_map: HashMap::new(),
             images_to_destroy: vec![],
             egui_state,
             viewport_info: None,
-            new_texture_delta: vec![],
+            callback: Rect {
+                min: Pos2::new(0.0, 0.0),
+                max: Pos2::new(0.0, 0.0),
+            },
         })
     }
 
@@ -179,7 +193,7 @@ impl Gui {
         event: &winit::event::WindowEvent,
     ) -> FullOutput {
         // Each frame:
-        let _response = self.egui_state.on_window_event(window, event);
+
         let viewport_info = self.viewport_info.as_mut().unwrap();
 
         egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
@@ -199,10 +213,9 @@ impl Gui {
             self.viewport_info = Some(input.viewport().clone())
         }
         self.egui_state.egui_ctx().run(input, |ctx| {
-            menu::show_menu(ctx);
             egui::CentralPanel::default()
                 .frame(egui::Frame::new())
-                .show(ctx, |ui| show(data, scene, ctx, ui));
+                .show(ctx, |ui| self.callback = show(data, scene, ctx, ui));
         })
 
         // handle full_output
@@ -226,7 +239,7 @@ impl Gui {
         instance: &Instance,
         device: &Device,
         data: &mut AppData,
-        image_delta: TexturesDelta,
+        image_delta: &TexturesDelta,
     ) -> anyhow::Result<()> {
         if !image_delta.is_empty() {
             println!("image delta is not empty");
@@ -343,47 +356,50 @@ impl Gui {
         for i in 0..render_objects.len() {
             let (id, _) = texture_id[i];
             let rect = primitives[i].clip_rect;
-            let (indices, verts) = prim_to_mesh(&primitives[i]);
-            render_objects[i]
-                .vertex_data
-                .update_vertex_data(instance, device, data, verts, indices)?;
-            render_objects[i].id = id;
-            render_objects[i].rect = rect;
-            /*device
-                            .free_descriptor_sets(data.descriptor_pool, &[render_objects[i].descriptor_set])?;
-            */
-            update_gui_descriptor_sets(
-                &render_objects[i].descriptor_set,
-                &self.image_map,
-                device,
-                &id,
-            )?;
-            //    render_objects[i].descriptor_set =
-            //        create_gui_descriptor_sets(&self.image_map, device, data, &id)?;
+            match prim_to_mesh(&primitives[i]) {
+                Either::Left(rect) => self.callback = rect,
+                Either::Right((indices, verts)) => {
+                    render_objects[i]
+                        .vertex_data
+                        .update_vertex_data(instance, device, data, verts, indices)?;
+                    render_objects[i].id = id;
+                    render_objects[i].rect = rect;
+                    update_gui_descriptor_sets(
+                        &render_objects[i].descriptor_set,
+                        &self.image_map,
+                        device,
+                        &id,
+                    )?;
+                }
+            }
         }
 
         for i in render_objects.len()..primitives.len() {
             let (id, _) = texture_id[i];
             let rect = primitives[i].clip_rect;
-            let (indices, verts) = prim_to_mesh(&primitives[i]);
-            let vertex_data = unsafe {
-                VertexData::create_vertex_data(
-                    instance,
-                    device,
-                    data,
-                    verts.to_owned(),
-                    indices,
-                    true,
-                )
-            }?;
-            self.render_objects[image_index].push(GuiRenderObject {
-                vertex_data,
-                descriptor_set: unsafe {
-                    create_gui_descriptor_sets(&self.image_map, device, data, &id)
-                }?,
-                id,
-                rect,
-            });
+            match prim_to_mesh(&primitives[i]) {
+                Either::Left(rect) => self.callback = rect,
+                Either::Right((indices, verts)) => {
+                    let vertex_data = unsafe {
+                        VertexData::create_vertex_data(
+                            instance,
+                            device,
+                            data,
+                            verts.to_owned(),
+                            indices,
+                            true,
+                        )
+                    }?;
+                    self.render_objects[image_index].push(GuiRenderObject {
+                        vertex_data,
+                        descriptor_set: unsafe {
+                            create_gui_descriptor_sets(&self.image_map, device, data, &id)
+                        }?,
+                        id,
+                        rect,
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -413,32 +429,36 @@ impl Gui {
                 let rect = prim.clip_rect;
                 let (id, _) = texture_id[i];
 
-                let (indices, verts) = prim_to_mesh(prim);
-                let vertex_data = unsafe {
-                    VertexData::create_vertex_data(
-                        instance,
-                        device,
-                        data,
-                        verts.to_owned(),
-                        indices.clone(),
-                        true,
-                    )
-                }?;
-                gui_render_objects.push(GuiRenderObject {
-                    vertex_data,
-                    descriptor_set: unsafe {
-                        create_gui_descriptor_sets(&self.image_map, device, data, &id)
-                    }?,
-                    id,
-                    rect,
-                });
+                match prim_to_mesh(prim) {
+                    Either::Left(rect) => self.callback = rect,
+                    Either::Right((indices, verts)) => {
+                        let vertex_data = unsafe {
+                            VertexData::create_vertex_data(
+                                instance,
+                                device,
+                                data,
+                                verts.to_owned(),
+                                indices.clone(),
+                                true,
+                            )
+                        }?;
+                        gui_render_objects.push(GuiRenderObject {
+                            vertex_data,
+                            descriptor_set: unsafe {
+                                create_gui_descriptor_sets(&self.image_map, device, data, &id)
+                            }?,
+                            id,
+                            rect,
+                        });
+                    }
+                }
             }
             self.render_objects.push(gui_render_objects)
         }
         Ok(())
     }
 }
-pub fn prim_to_mesh(prim: &ClippedPrimitive) -> (Vec<u32>, Vec<VertexGui>) {
+pub fn prim_to_mesh(prim: &ClippedPrimitive) -> Either<Rect, (Vec<u32>, Vec<VertexGui>)> {
     match &prim.primitive {
         epaint::Primitive::Mesh(mesh) => {
             let vertices: Vec<VertexGui> = mesh
@@ -453,27 +473,18 @@ pub fn prim_to_mesh(prim: &ClippedPrimitive) -> (Vec<u32>, Vec<VertexGui>) {
                     color: U8Vec4::new(v.color.r(), v.color.g(), v.color.b(), v.color.a()),
                 })
                 .collect();
-            (mesh.indices.clone(), vertices)
+            Either::Right((mesh.indices.clone(), vertices))
         }
-        epaint::Primitive::Callback(_) => todo!(),
+        epaint::Primitive::Callback(a) => Either::Left(a.rect),
     }
 }
-pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut Ui) {
+
+pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut Ui) -> Rect {
+    menu::show_menu(ctx);
     SidePanel::new(egui::panel::Side::Left, "my panel ")
         .default_width(200.0)
         .min_width(10.0)
         .show(ctx, |ui| {
-            ui.label(
-                RichText::new("Hello egui! IM home you dummy, and so it goes lalalalla")
-                    .color(egui::Color32::RED)
-                    .size(28.0),
-            );
-            ui.label(
-                RichText::new(format!("1234567890render object length scappappa: {}", 5))
-                    .color(egui::Color32::GREEN)
-                    .size(18.0),
-            );
-
             objects::show_objects(scene, ctx, ui);
             ui.separator();
             ui.label("Camera");
@@ -495,12 +506,10 @@ pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut
             });
         });
 
-    SidePanel::new(egui::panel::Side::Right, "right panel ")
-        .min_width(100.0)
-        .max_width(200.0)
-        .show(ctx, |ui| {
-            selected_object(scene, ctx, ui);
-        });
+    egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
+        selected_object(scene, ctx, ui);
+    });
+    paint_callback(ctx, ui)
 }
 pub fn filled_triangle(
     ui: &egui::Ui,
@@ -517,4 +526,11 @@ pub fn filled_triangle(
         visuals.fg_stroke.color,
         visuals.fg_stroke,
     ));
+}
+
+pub fn paint_callback(ctx: &egui::Context, ui: &mut Ui) -> Rect {
+    let area = egui::CentralPanel::default()
+        .frame(egui::Frame::new())
+        .show(ctx, |ui| {});
+    area.response.rect
 }

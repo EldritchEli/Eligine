@@ -1,4 +1,5 @@
 use crate::game_objects::transform::Transform;
+use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::render_app::AppData;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE};
@@ -91,8 +92,12 @@ impl Camera {
         }
     }
 
-    pub fn projection_matrix(&self, data: &AppData) -> Mat4 {
-        let aspect = data.swapchain_extent.width as f32 / data.swapchain_extent.height as f32;
+    pub fn projection_matrix(&self, data: &AppData, gui: &Gui) -> Mat4 {
+        let aspect = if gui.enabled {
+            (gui.callback.max.x - gui.callback.min.x) / (gui.callback.max.y - gui.callback.min.y)
+        } else {
+            data.swapchain_extent.width as f32 / data.swapchain_extent.height as f32
+        };
         CORRECTION
             * Mat4::perspective_rh(
                 self.fov * (PI / 180.0),

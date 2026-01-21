@@ -12,20 +12,24 @@ pub enum KeyState {
     Hold,
 }
 impl KeyState {
-    pub fn is_held(self) -> bool {
-        Hold == self
+    pub fn is_held(&self) -> bool {
+        Hold == *self
     }
-    pub fn is_down(self) -> bool {
-        Hold == self || Enter == self
+    pub fn is_down(&self) -> bool {
+        Hold == *self || Enter == *self
     }
-    pub fn is_up(self) -> bool {
-        Release == self || Nothing == self
+    pub fn is_up(&self) -> bool {
+        Release == *self || Nothing == *self
     }
-    pub fn is_released(self) -> bool {
-        Release == self
+    pub fn is_released(&self) -> bool {
+        Release == *self
     }
-    pub fn is_entered(self) -> bool {
-        Enter == self
+    pub fn is_entered(&mut self) -> bool {
+        let entered = Enter == *self;
+        if entered {
+            *self = Hold;
+        }
+        entered
     }
 }
 #[derive(Debug, Clone, Default)]
@@ -60,6 +64,18 @@ pub struct InputState {
     pub key8: KeyState,
     pub key9: KeyState,
     pub key0: KeyState,
+    pub f1: KeyState,
+    pub f2: KeyState,
+    pub f3: KeyState,
+    pub f4: KeyState,
+    pub f5: KeyState,
+    pub f6: KeyState,
+    pub f7: KeyState,
+    pub f8: KeyState,
+    pub f9: KeyState,
+    pub f10: KeyState,
+    pub f11: KeyState,
+    pub f12: KeyState,
     pub key_backspace: KeyState,
 
     pub key_d: KeyState,
@@ -73,8 +89,6 @@ pub struct InputState {
     pub key_up: KeyState,
     pub key_down: KeyState,
 }
-
-impl InputState {}
 
 impl InputState {
     /*pub(crate) fn new() -> Self {
@@ -245,6 +259,18 @@ impl InputState {
                 KeyCode::Backspace => {
                     self.key_backspace = InputState::set_key(&self.key_backspace, key, state);
                 }
+                KeyCode::F1 => self.f1 = InputState::set_key(&self.f1, key, state),
+                KeyCode::F2 => self.f2 = InputState::set_key(&self.f2, key, state),
+                KeyCode::F3 => self.f3 = InputState::set_key(&self.f3, key, state),
+                KeyCode::F4 => self.f4 = InputState::set_key(&self.f4, key, state),
+                KeyCode::F5 => self.f5 = InputState::set_key(&self.f5, key, state),
+                KeyCode::F6 => self.f6 = InputState::set_key(&self.f6, key, state),
+                KeyCode::F7 => self.f7 = InputState::set_key(&self.f7, key, state),
+                KeyCode::F8 => self.f8 = InputState::set_key(&self.f8, key, state),
+                KeyCode::F9 => self.f9 = InputState::set_key(&self.f9, key, state),
+                KeyCode::F10 => self.f10 = InputState::set_key(&self.f10, key, state),
+                KeyCode::F11 => self.f11 = InputState::set_key(&self.f11, key, state),
+                KeyCode::F12 => self.f12 = InputState::set_key(&self.f12, key, state),
 
                 a => println!("{:?} {:?}", a, state),
             }

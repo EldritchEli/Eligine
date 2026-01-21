@@ -86,7 +86,7 @@ impl WinitWrapper {
                         &app.instance,
                         &app.device,
                         &mut app.data,
-                        output.textures_delta.clone(),
+                        &output.textures_delta,
                     )?;
                     gui.init_gui_mesh(
                         &app.instance,
@@ -123,10 +123,8 @@ impl ApplicationHandler for WinitWrapper {
         let (gui_ctx, window) = Gui::get_window_and_ctx(event_loop).unwrap();
         window.request_redraw();
         if self.app.initialized() {
-        } else {
-            if let Err(st) = self.init(window, event_loop, Some(gui_ctx)) {
-                error!("{:?}", st);
-            }
+        } else if let Err(st) = self.init(window, event_loop, Some(gui_ctx)) {
+            error!("{:?}", st);
         }
     }
 
@@ -149,18 +147,10 @@ impl ApplicationHandler for WinitWrapper {
 
         app.time_stamp = elapsed;
         let gui = self.gui.as_mut().unwrap();
-        let output = gui.run_egui(
-            &mut app.data,
-            &mut app.scene,
-            self.window.as_ref().unwrap(),
-            &event,
-        );
-        if !output.textures_delta.is_empty() {
-            println!("new texture delta");
-            gui.new_texture_delta.push(output.textures_delta.clone())
-        }
+        let window = self.window.as_ref().unwrap();
+        let response = gui.egui_state.on_window_event(window, &event);
         self.input_state.read_event(&event);
-
+        gui.set_enabled(&mut self.input_state);
         app.scene.update(dt, &self.input_state);
         match event {
             WindowEvent::Resized(size) => {
@@ -193,8 +183,16 @@ impl ApplicationHandler for WinitWrapper {
             }
             WindowEvent::RedrawRequested => {
                 let window = &self.window.as_ref().unwrap();
+                let output = if gui.enabled {
+                    Some(gui.run_egui(&mut app.data, &mut app.scene, window, &event))
+                } else {
+                    None
+                };
+                /*if !output.textures_delta.is_empty() {
+                    gui.new_texture_delta.push(output.textures_delta.clone())
+                }*/
+                unsafe { app.render(window, self.gui.as_mut().unwrap(), output) }.unwrap();
                 window.request_redraw();
-                unsafe { app.render(window, self.gui.as_mut().unwrap(), output) }.unwrap()
             }
             _ =>
                 /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */

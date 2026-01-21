@@ -66,4 +66,5 @@ pub fn selected_object(scene: &mut Scene, ctx: &Context, ui: &mut Ui) {
                 glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.0, rotation.1, rotation.2);
         };
     });
+    ui.separator();
 }

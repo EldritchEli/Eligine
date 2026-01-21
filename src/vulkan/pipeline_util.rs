@@ -41,22 +41,13 @@ pub unsafe fn create_pbr_pipeline(
         .vertex_binding_descriptions(binding_descriptions)
         .vertex_attribute_descriptions(&attribute_descriptions);
 
-    let viewport = vk::Viewport::builder()
-        .x(190.0)
-        .y(0.0)
-        .width(data.swapchain_extent.width as f32)
-        .height(data.swapchain_extent.height as f32)
-        .min_depth(0.0)
-        .max_depth(1.0);
-
     let scissor = vk::Rect2D::builder()
         .offset(vk::Offset2D { x: 0, y: 0 })
         .extent(data.swapchain_extent);
 
-    let viewports = &[viewport];
     let scissors = &[scissor];
     let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
-        .viewports(viewports)
+        .viewport_count(1)
         .scissors(scissors);
 
     let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
@@ -105,7 +96,7 @@ pub unsafe fn create_pbr_pipeline(
 
     let dynamic_states = &[vk::DynamicState::VIEWPORT, vk::DynamicState::LINE_WIDTH];
 
-    let _dynamic_state =
+    let dynamic_state =
         vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(dynamic_states);
 
     let set_layouts = &[data.pbr_descriptor_set_layout];
@@ -125,6 +116,7 @@ pub unsafe fn create_pbr_pipeline(
         .rasterization_state(&rasterization_state)
         .multisample_state(&multisample_state)
         .depth_stencil_state(&depth_stencil_state)
+        .dynamic_state(&dynamic_state)
         .color_blend_state(&color_blend_state)
         .layout(pipeline_layout)
         .render_pass(data.render_pass)

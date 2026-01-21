@@ -247,11 +247,12 @@ impl App {
         &mut self,
         image_index: usize,
         window: &Window,
+        gui: &mut Gui,
     ) -> anyhow::Result<()> {
         let _time = self.start.elapsed().as_secs_f32();
         let view = self.scene.camera.transform.matrix();
 
-        let proj = self.scene.camera.projection_matrix(&self.data);
+        let proj = self.scene.camera.projection_matrix(&self.data, gui);
 
         self.data.pbr_push_contant = PbrPushConstant {
             proj_inv_view: (view.inverse()),
@@ -297,7 +298,7 @@ impl App {
         &mut self,
         window: &Window,
         gui: &mut Gui,
-        egui_output: FullOutput,
+        egui_output: Option<FullOutput>,
     ) -> anyhow::Result<()> {
         self.device
             .wait_for_fences(&[self.data.in_flight_fences[self.frame]], true, u64::MAX)?;
@@ -334,23 +335,24 @@ impl App {
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
         gui.cleanup_garbage(&self.device);
-        if !gui.new_texture_delta.is_empty() {
-            let texture_deltas: Vec<TexturesDelta> = gui.new_texture_delta.drain(0..).collect();
-            texture_deltas.into_iter().for_each(|t| {
-                gui.update_gui_images(&self.instance, &self.device, &mut self.data, t)
-                    .unwrap();
-            });
-            assert!(gui.new_texture_delta.is_empty());
+        if let Some(egui_output) = egui_output {
+            gui.update_gui_images(
+                &self.instance,
+                &self.device,
+                &mut self.data,
+                &egui_output.textures_delta,
+            )
+            .unwrap();
+            gui.update_gui_mesh(
+                &self.instance,
+                &self.device,
+                &mut self.data,
+                &egui_output,
+                gui.egui_state.egui_ctx().pixels_per_point(),
+                image_index,
+            )?;
         }
-        gui.update_gui_mesh(
-            &self.instance,
-            &self.device,
-            &mut self.data,
-            &egui_output,
-            gui.egui_state.egui_ctx().pixels_per_point(),
-            image_index,
-        )?;
-        self.update_uniform_buffer(image_index, window)?;
+        self.update_uniform_buffer(image_index, window, gui)?;
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];

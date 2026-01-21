@@ -74,6 +74,7 @@ pub unsafe fn create_command_buffer(
 
     //device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
     if let Some(gui) = &gui
+        && gui.enabled
         && !gui.render_objects.is_empty()
     {
         device.cmd_bind_pipeline(
@@ -111,7 +112,6 @@ pub unsafe fn create_command_buffer(
                 &[],
             );
             let Rect { min, max } = object.rect;
-            let scale = window.scale_factor() as f32;
             let ppp = gui.egui_state.egui_ctx().pixels_per_point();
             let clip_x = ppp * min.x;
             let clip_y = ppp * min.y;
@@ -151,7 +151,33 @@ pub unsafe fn create_command_buffer(
         vk::PipelineBindPoint::GRAPHICS,
         data.pbr_pipeline,
     );
+    let viewports = if let Some(gui) = gui
+        && gui.enabled
+    {
+        let Rect { min, max } = gui.callback;
 
+        let ppp = gui.egui_state.egui_ctx().pixels_per_point();
+        let x = ppp * min.x;
+        let y = ppp * min.y;
+        let w = max.x * ppp - x;
+        let h = max.y * ppp - y;
+        &[vk::Viewport::builder()
+            .x(x)
+            .y(y)
+            .width(w)
+            .height(h)
+            .min_depth(0.0)
+            .max_depth(1.0)]
+    } else {
+        &[vk::Viewport::builder()
+            .x(0.0)
+            .y(0.0)
+            .width(data.swapchain_extent.width as f32)
+            .height(data.swapchain_extent.height as f32)
+            .min_depth(0.0)
+            .max_depth(1.0)]
+    };
+    device.cmd_set_viewport(*command_buffer, 0, viewports);
     for (_, object) in scene.render_objects.iter() {
         device.cmd_bind_vertex_buffers(
             *command_buffer,

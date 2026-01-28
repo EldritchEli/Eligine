@@ -9,15 +9,29 @@ use crate::{
     gui::objects,
 };
 
-pub fn show_objects(scene: &mut Scene, ctx: &Context, ui: &mut Ui) {
+pub fn show_objects(scene: &Scene, ctx: &Context, ui: &mut Ui) -> ObjectId {
+    let mut selected_object = scene.selected_object;
     // selected_object(scene, ctx, ui);
     ScrollArea::vertical().show(ui, |ui| {
-        for (i, object) in scene.objects.iter_mut() {
-            if object.parent.is_none() && ui.button(object.name.clone()).clicked() {
-                scene.selected_object = ObjectId(i);
-            };
+        for (i, object) in scene.objects.iter() {
+            if object.parent.is_none() {
+                if ui.button(object.name.clone()).clicked() {
+                    selected_object = ObjectId(i);
+                };
+                egui::CollapsingHeader::new(i.to_string()).show(ui, |ui| {
+                    for i in &object.children {
+                        if ui
+                            .button(scene.objects.get(*i).unwrap().name.clone())
+                            .clicked()
+                        {
+                            selected_object = *i;
+                        };
+                    }
+                });
+            }
         }
     });
+    selected_object
 }
 
 pub fn selected_object(scene: &mut Scene, ctx: &Context, ui: &mut Ui) {

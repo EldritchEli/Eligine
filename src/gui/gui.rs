@@ -485,7 +485,7 @@ pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut
         .default_width(200.0)
         .min_width(10.0)
         .show(ctx, |ui| {
-            objects::show_objects(scene, ctx, ui);
+            scene.selected_object = objects::show_objects(scene, ctx, ui);
             ui.separator();
             ui.label("Camera");
             ui.horizontal(|ui| {
@@ -506,7 +506,8 @@ pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut
             });
         });
 
-    egui::TopBottomPanel::bottom("bottom panel").show(ctx, |ui| {
+    egui::TopBottomPanel::bottom("bottom panel").max_height(400.0).min_height(200.0)
+      .show(ctx, |ui| {
         selected_object(scene, ctx, ui);
     });
     paint_callback(ctx, ui)

@@ -87,10 +87,7 @@ fn load_node(
                     indices.iter().map(|u| *u as u32).collect()
                 }
                 gltf::accessor::DataType::U16 => {
-                    assert!(
-                        index_slice.len() % 2 == 0,
-                        "index list must be divisible by 2"
-                    );
+                    assert_eq!(index_slice.len() % 2, 0, "index list must be divisible by 2");
                     println!("index data type: u16");
                     let indices: &[u16] = unsafe { std::mem::transmute(index_slice) };
                     let mut u32s: Vec<u32> = vec![];
@@ -100,10 +97,7 @@ fn load_node(
                     u32s
                 }
                 gltf::accessor::DataType::U32 => {
-                    assert!(
-                        index_slice.len() % 4 == 0,
-                        "index list must be divisible by 4"
-                    );
+                    assert_eq!(index_slice.len() % 4, 0, "index list must be divisible by 4");
                     println!("index data type: u32");
                     let indices: &[u32] = unsafe { std::mem::transmute(index_slice) };
                     let mut new_indices: Vec<u32> = vec![];
@@ -234,10 +228,7 @@ fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> 
 
 fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
     let positions = *map.get(&Semantic::Positions).unwrap();
-    assert!(
-        positions.len() % 12 == 0,
-        "positions must be divisible by 12"
-    );
+    assert_eq!(positions.len() % 12, 0, "positions must be divisible by 12");
     let positions: &[Vec3] = unsafe { std::mem::transmute(positions) };
 
     let normals = *map.get(&Semantic::Normals).unwrap();
@@ -246,16 +237,11 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
     let coord_flag = coords.is_some();
     let coords: &[Vec2] = if coord_flag {
         let coords = *coords.unwrap();
-        assert!(coords.len() % 8 == 0, "coords must be divisible by 8");
+        assert_eq!(coords.len() % 8, 0, "coords must be divisible by 8");
         let coords: &[Vec2] = unsafe { std::mem::transmute(coords) };
         println!("coords: {:?}", coords.len() / 8);
-        assert!(
-            coords.len() / 2 == positions.len() / 3,
-            "attribute lists must be of the same length, 
-        but is {} and {}",
-            coords.len() / 2,
-            positions.len() / 3
-        );
+        assert_eq!(coords.len() / 2, positions.len() / 3, "attribute lists must be of the same length,
+        but is {} and {}", coords.len() / 2, positions.len() / 3);
         coords
     } else {
         &[]

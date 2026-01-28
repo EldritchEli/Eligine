@@ -54,7 +54,7 @@ pub unsafe fn quad_vertex_data(
 }
 #[derive(Clone, Debug, Default)]
 pub struct StagingMap {
-    pub mem_pointer: *mut std::ffi::c_void,
+    pub mem_pointer: usize,
     pub staging_memory: vk::DeviceMemory,
     pub staging_buffer: vk::Buffer,
     pub size: u64,
@@ -205,7 +205,7 @@ where
         copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
         if has_map {
             let mem_map = Some(StagingMap {
-                mem_pointer: memory,
+                mem_pointer: memory as usize,
                 staging_memory: staging_buffer_memory,
                 staging_buffer,
                 size,
@@ -231,7 +231,7 @@ where
 
         memcpy(
             vertices.as_ptr(), /*VERTICES.as_ptr()*/
-            vertex.mem_pointer.cast(),
+            vertex.mem_pointer as *mut V,
             vertices.len(),
         );
 
@@ -283,7 +283,7 @@ where
         copy_buffer(device, data, staging_buffer, index_buffer, size)?;
         if has_map {
             let mem_map = Some(StagingMap {
-                mem_pointer: memory,
+                mem_pointer: memory as usize,
                 staging_memory: staging_buffer_memory,
                 staging_buffer,
                 size,
@@ -309,7 +309,7 @@ where
 
         memcpy(
             indices.as_ptr(), /*VERTICES.as_ptr()*/
-            index.mem_pointer.cast(),
+            index.mem_pointer as *mut u32,
             indices.len(),
         );
 

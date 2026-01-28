@@ -23,6 +23,7 @@ use crate::vulkan::uniform_buffer_object::{
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
+use bevy::ecs::resource::Resource;
 use egui::{FullOutput, TexturesDelta};
 use log::info;
 use std::f32::consts::PI;
@@ -44,7 +45,7 @@ use glam::Mat4;
 use std::ptr::copy_nonoverlapping as memcpy;
 
 /// Our Vulkan app.
-#[derive(Debug)]
+#[derive(Debug, Resource)]
 pub struct App {
     pub entry: Entry,
     pub instance: Instance,

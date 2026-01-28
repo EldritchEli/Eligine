@@ -1,17 +1,18 @@
-use crate::gltf;
+use crate::{
+    gltf,
+    gui::gui::{Gui, create_gui_from_window},
+};
 use bevy::{
-    a11y::AccessibilityPlugin,
     app::{PanicHandlerPlugin, ScheduleRunnerPlugin},
     diagnostic::DiagnosticsPlugin,
-    gltf::GltfPlugin,
     input::InputPlugin,
-    log::LogPlugin,
-    pbr::PbrPlugin,
     prelude::*,
     scene::ScenePlugin,
     time::TimePlugin,
-    winit::{WakeUp, WinitPlugin},
+    window::PrimaryWindow,
+    winit::{WinitPlugin, WinitWindows},
 };
+use log::info;
 #[derive(Resource)]
 pub struct AssetList(Vec<String>);
 impl AssetList {
@@ -43,7 +44,6 @@ pub struct VulkanDefault;
 impl Plugin for VulkanDefault {
     fn build(&self, app: &mut App) {
         app.add_plugins(PanicHandlerPlugin);
-        app.add_plugins(LogPlugin::default());
         app.add_plugins(TaskPoolPlugin::default());
         //app.add_plugins(FrameCountPlugin);
         app.add_plugins(TimePlugin);
@@ -53,14 +53,29 @@ impl Plugin for VulkanDefault {
         app.add_plugins(ScheduleRunnerPlugin::default());
         app.add_plugins(AssetPlugin::default());
         app.add_plugins(ScenePlugin);
-        app.add_plugins(GltfPlugin::default());
-        app.add_plugins(ImagePlugin::default());
         // app.init_asset::<bevy_pbr::prelude::StandardMaterial>();
 
-        //app.add_plugins(WindowPlugin::default());
-        //app.add_plugins(AccessibilityPlugin);
-        //app.add_plugins(WinitPlugin::<WakeUp>::default());
+        app.add_plugins(WindowPlugin::default());
+        app.add_plugins(WinitPlugin::default());
+        app.add_systems(Startup, create_gui_from_window);
+        //add
+        //app.insert_non_send_resource(Gui);
     }
+}
+
+fn setup_custom_renderer(
+    primary_window: Query<Entity, With<PrimaryWindow>>,
+    windows: NonSend<WinitWindows>,
+) {
+    let entity = primary_window.single().unwrap();
+    let raw_window = windows.get_window(entity).unwrap();
+
+    // Here you can use raw_window.canvas() or raw_window.raw_window_handle()
+    // to initialize your custom WGPU Device, Vulkan Instance, etc.
+    println!(
+        "Custom renderer initialized for window: {:?}",
+        raw_window.id()
+    );
 }
 /*
     PanicHandlerPlugin

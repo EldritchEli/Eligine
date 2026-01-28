@@ -1,13 +1,6 @@
-use bevy::math::{Quat, ops::round};
-use egui::{Context, DragValue, RichText, ScrollArea, TextEdit, Ui};
+use egui::{Context, DragValue, RichText, ScrollArea, Ui};
 
-use crate::{
-    game_objects::{
-        render_object::ObjectId,
-        scene::{ObjectSlab, Scene},
-    },
-    gui::objects,
-};
+use crate::game_objects::{render_object::ObjectId, scene::Scene};
 
 pub fn show_objects(scene: &Scene, ctx: &Context, ui: &mut Ui) -> ObjectId {
     let mut selected_object = scene.selected_object;

@@ -1,10 +1,22 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
+use bevy::{
+    ecs::{
+        entity::Entity,
+        query::With,
+        resource::Resource,
+        system::{Commands, NonSend, Query, Res},
+        world::World,
+    },
+    window::PrimaryWindow,
+    winit::{DisplayHandleWrapper, EventLoopProxyWrapper, WinitWindows},
+};
 use egui::{
     ClippedPrimitive, Color32, FullOutput, Pos2, Rect, RichText, SidePanel, TextureId,
     TexturesDelta, Ui, ViewportInfo,
 };
+use egui_winit::{apply_viewport_builder_to_window, create_winit_window_attributes};
 use glam::{U8Vec4, Vec2};
 use gltf::mesh::util::indices;
 use itertools::Either;
@@ -139,6 +151,53 @@ impl std::fmt::Debug for Gui {
     }
 }
 
+pub fn create_gui_from_window(world: &mut World) {
+    let mut primary_window_query = world.query_filtered::<Entity, With<PrimaryWindow>>();
+    let winit_windows = world
+        .get_non_send_resource::<NonSend<WinitWindows>>()
+        .unwrap();
+    let display_handle = world.get_resource::<DisplayHandleWrapper>().unwrap();
+    // 2. Access the WinitWindows resource (Main Thread only)
+    let window = if let Ok(window_entity) = primary_window_query.single(world) &&
+            // Use the entity to look up the actual winit windo
+            let Some(winit_window) = winit_windows.get_window(window_entity)
+    {
+        // Now you have the raw winit instance!
+        winit_window.deref()
+    } else {
+        panic!("failed to get window context")
+    };
+    let egui_ctx = egui::Context::default();
+    let viewport_builder = egui::viewport::ViewportBuilder::default()
+        .with_title("Eligine")
+        .with_inner_size(egui::Vec2::new(1024.0, 768.0));
+
+    let window_attributes = create_winit_window_attributes(&egui_ctx, viewport_builder.clone());
+    apply_viewport_builder_to_window(&egui_ctx, window, &viewport_builder);
+    let event_loop = &display_handle.0;
+    let viewport_id = egui_ctx.viewport_id();
+    let egui_state = egui_winit::State::new(
+        egui_ctx,
+        viewport_id,
+        event_loop,
+        Some(window.scale_factor() as f32),
+        Some(winit::window::Theme::Dark),
+        None,
+    );
+
+    world.insert_non_send_resource(Gui {
+        enabled: false,
+        render_objects: vec![],
+        image_map: HashMap::new(),
+        images_to_destroy: vec![],
+        egui_state,
+        viewport_info: None,
+        callback: Rect {
+            min: Pos2::new(0.0, 0.0),
+            max: Pos2::new(0.0, 0.0),
+        },
+    });
+}
 impl Gui {
     pub fn set_enabled(&mut self, input: &mut InputState) {
         if input.f12.is_entered() {
@@ -146,6 +205,7 @@ impl Gui {
             self.enabled = !self.enabled;
         }
     }
+    /// there must be an available winit_window to query. otherwise a panic will occur
     pub fn get_window_and_ctx(
         event_loop: &winit::event_loop::ActiveEventLoop,
     ) -> anyhow::Result<(egui::Context, window::Window)> {
@@ -506,10 +566,12 @@ pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut
             });
         });
 
-    egui::TopBottomPanel::bottom("bottom panel").max_height(400.0).min_height(200.0)
-      .show(ctx, |ui| {
-        selected_object(scene, ctx, ui);
-    });
+    egui::TopBottomPanel::bottom("bottom panel")
+        .max_height(400.0)
+        .min_height(200.0)
+        .show(ctx, |ui| {
+            selected_object(scene, ctx, ui);
+        });
     paint_callback(ctx, ui)
 }
 pub fn filled_triangle(

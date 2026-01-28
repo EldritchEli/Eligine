@@ -1,4 +1,5 @@
 use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
+use bevy::ecs::resource::Resource;
 use glam::{Vec2, vec2};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -32,7 +33,7 @@ impl KeyState {
         entered
     }
 }
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Resource)]
 pub struct InputState {
     pub mouse_wheel_delta: Vec2,
     pub mouse_delta: Vec2,

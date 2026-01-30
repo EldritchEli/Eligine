@@ -143,8 +143,6 @@ impl ApplicationHandler for WinitWrapper {
             }
             AppState::Initialized { app } => app,
         };
-        let a =
-            unsafe { QueueFamilyIndices::get(&app.instance, &app.data, app.data.physical_device) };
 
         let elapsed = app.start.elapsed().as_secs_f32();
         let dt = elapsed - app.time_stamp;

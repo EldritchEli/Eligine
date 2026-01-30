@@ -101,9 +101,10 @@ impl InputState {
                 position.x as f32 - self.mouse_position.x,
                 position.y as f32 - self.mouse_position.y,
             );
-        } else {
-            self.mouse_delta = Vec2::ZERO
         }
+    }
+    pub fn reset_mouse_delta(&mut self) {
+        self.mouse_delta = Vec2::ZERO
     }
     fn set_mouse_position(&mut self, event: &WindowEvent) {
         if let WindowEvent::CursorMoved { position, .. } = event {

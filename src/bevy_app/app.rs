@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use crate::{
     bevy_app::render::{destroy, render},
-    game_objects::scene::Scene,
+    game_objects::{camera::update_camera_and_gui, scene::Scene},
     gui::gui::{Gui, create_gui_from_window},
     vulkan::{
         color_objects::create_color_objects,
@@ -25,7 +25,10 @@ use crate::{
     },
 };
 use bevy::{
-    app::{App, PanicHandlerPlugin, Plugin, ScheduleRunnerPlugin, Startup, TaskPoolPlugin, Update},
+    app::{
+        App, PanicHandlerPlugin, Plugin, PostUpdate, ScheduleRunnerPlugin, Startup, TaskPoolPlugin,
+        Update,
+    },
     asset::AssetPlugin,
     diagnostic::DiagnosticsPlugin,
     ecs::{
@@ -39,7 +42,7 @@ use bevy::{
     input::InputPlugin,
     time::{Time, TimePlugin},
     transform::TransformPlugin,
-    window::{PrimaryWindow, WindowPlugin},
+    window::{PrimaryWindow, RequestRedraw, WindowCloseRequested, WindowDestroyed, WindowPlugin},
     winit::{RawWinitWindowEvent, WINIT_WINDOWS, WinitPlugin},
 };
 
@@ -88,7 +91,14 @@ impl Plugin for VulkanDefault {
         app.add_plugins(WindowPlugin::default());
         app.insert_resource(InputState::default());
         app.add_systems(Startup, (create_render_app, create_gui_from_window));
-        app.add_systems(Update, (process_raw_winit_events, old_process_window_event));
+        app.add_systems(Update, (process_raw_winit_events, redraw, destroy_renderer));
+        //app.add_systems(Update, update_camera_and_gui);
+        app.add_systems(
+            PostUpdate,
+            (redraw, |mut writer: MessageWriter<RequestRedraw>| {
+                writer.write(RequestRedraw);
+            }),
+        );
     }
 }
 
@@ -168,16 +178,15 @@ fn init_gui(
         if let Some(window) = windows.get_window(w_id) {
             let ppp = gui.egui_state.egui_ctx().pixels_per_point();
             let output = gui.run_egui_fst(&mut data, &mut scene, &window);
-            /*gui.update_gui_images(
+            gui.update_gui_images(
                 &instance.inner,
                 &device.inner,
                 &mut data,
                 &output.textures_delta,
             )
             .unwrap();
-            println!("ther");
             gui.init_gui_mesh(&instance.inner, &device.inner, &mut data, &output, ppp)
-                .unwrap();*/
+                .unwrap();
         }
     });
 }
@@ -185,14 +194,14 @@ fn init_gui(
 fn create_render_app(
     mut commands: Commands,
     window_query: Query<Entity, With<PrimaryWindow>>,
-    writer: MessageWriter<bevy::window::WindowEvent>,
+    mut writer: MessageWriter<RequestRedraw>,
 ) {
     // let raw_window = windows.get_window(entity).unwrap();
     let w_id = window_query.single().unwrap();
     WINIT_WINDOWS.with_borrow(|windows| {
         if let Some(window) = windows.get_window(w_id) {
             commands.insert_resource(unsafe { render_app::App::create(window).unwrap() });
-            window.request_redraw();
+            writer.write(RequestRedraw);
         } else {
             println!("failed to find window")
         }
@@ -214,71 +223,68 @@ pub fn process_raw_winit_events(
     WINIT_WINDOWS.with_borrow(|windows| {
         if let Some(window) = windows.get_window(w_id) {
             for event in event_reader.read() {
+                match event.event {
+                    winit::event::WindowEvent::Resized(size) => {
+                        if size.width == 0 || size.height == 0 {
+                        } else {
+                            app.resized = true;
+                        };
+                    }
+                    _ => {}
+                }
                 let response = gui.egui_state.on_window_event(window, &event.event);
                 input_state.read_event(&event.event);
-                gui.set_enabled(&mut input_state);
-                app.scene.update(time.delta_secs(), &input_state);
             }
+            gui.set_enabled(&mut input_state);
+            app.scene.update(0.012, &input_state);
+            input_state.reset_mouse_delta();
         }
     });
 }
 
-pub fn old_process_window_event(
+pub fn destroy_renderer(
     gui: NonSendMut<Gui>,
     mut app: ResMut<render_app::App>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
-    mut event_reader: MessageReader<RawWinitWindowEvent>,
+    mut event_reader: MessageReader<WindowCloseRequested>,
 ) {
     let mut gui = gui;
     let Some(event) = event_reader.read().next() else {
-        println!("no event");
         return;
     };
-    match event.event {
-        winit::event::WindowEvent::Resized(size) => {
-            if size.width == 0 || size.height == 0 {
-            } else {
-                app.resized = true;
-            }
-        }
+    // Destroy our Vulkan app.
+    println!("window closed");
 
-        winit::event::WindowEvent::Destroyed => {
-            println!("window destroyed");
-            unsafe {
-                app.device.device_wait_idle().unwrap();
-            }
-            unsafe {
-                app.destroy(&mut gui);
-            }
-        }
-        // Destroy our Vulkan app.
-        winit::event::WindowEvent::CloseRequested => {
-            println!("window closed");
-
-            unsafe {
-                app.destroy(&mut gui);
-            }
-        }
-        winit::event::WindowEvent::RedrawRequested => {
-            let entity = primary_window.single().unwrap();
-            WINIT_WINDOWS.with_borrow(|windows| {
-                let window = windows.get_window(entity).unwrap();
-
-                let output = if gui.enabled {
-                    Some(gui.old_run_egui_bevy(&mut app, window))
-                } else {
-                    None
-                };
-                /*if !output.textures_delta.is_empty() {
-                    gui.new_texture_delta.push(output.textures_delta.clone())
-                }*/
-                unsafe { app.render(window, &mut gui, output) }.unwrap();
-            })
-        }
-        _ =>
-            /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */
-            {}
+    unsafe {
+        app.device.device_wait_idle().unwrap();
     }
+    unsafe {
+        app.destroy(&mut gui);
+    }
+}
+pub fn redraw(
+    gui: NonSendMut<Gui>,
+    mut app: ResMut<render_app::App>,
+    primary_window: Query<Entity, With<PrimaryWindow>>,
+    mut event_reader: MessageReader<RequestRedraw>,
+) {
+    let mut gui = gui;
+    let Some(event) = event_reader.read().next() else {
+        return;
+    };
+    let entity = primary_window.single().unwrap();
+    WINIT_WINDOWS.with_borrow(|windows| {
+        let window = windows.get_window(entity).unwrap();
+
+        let output = if gui.enabled {
+            Some(gui.old_run_egui_bevy(&mut app, window))
+        } else {
+            None
+        }; /*if !output.textures_delta.is_empty() {
+        gui.new_texture_delta.push(output.textures_delta.clone())
+        }*/
+        unsafe { app.render(window, &mut gui, output) }.unwrap();
+    })
 }
 pub fn process_window_event(
     gui: NonSendMut<Gui>,
@@ -292,19 +298,11 @@ pub fn process_window_event(
 ) {
     let mut gui = gui;
     let Some(event) = event_reader.read().next() else {
-        println!("no event");
         return;
     };
     dbg!(&instance);
     println!("got event");
     match event.event {
-        winit::event::WindowEvent::Resized(size) => {
-            if size.width == 0 || size.height == 0 {
-            } else {
-                frame_info.resized = true;
-            }
-        }
-
         winit::event::WindowEvent::Destroyed => {
             println!("window destroyed");
             unsafe {

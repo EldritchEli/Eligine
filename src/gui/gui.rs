@@ -3,7 +3,8 @@ use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use bevy::{
     core_pipeline::core_2d::graph::input,
-    ecs::{entity::Entity, query::With, system::ResMut, world::World},
+    ecs::{entity::Entity, observer::On, query::With, system::ResMut, world::World},
+    input::keyboard::{KeyCode, KeyboardInput},
     window::PrimaryWindow,
     winit::{DisplayHandleWrapper, WINIT_WINDOWS},
 };
@@ -596,6 +597,14 @@ pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut
             ui.horizontal(|ui| {
                 ui.label("Far field");
                 ui.add(egui::DragValue::new(&mut scene.camera.far_field))
+            });
+            ui.horizontal(|ui| {
+                ui.label("slerp_speed");
+                ui.add(egui::DragValue::new(&mut scene.camera.slerp_speed))
+            });
+            ui.horizontal(|ui| {
+                ui.label("lerp_speed");
+                ui.add(egui::DragValue::new(&mut scene.camera.lerp_speed))
             });
         });
 

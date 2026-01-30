@@ -361,7 +361,7 @@ impl App {
         }
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
-        gui.cleanup_garbage(&self.device);
+        //gui.cleanup_garbage(&self.device);
         if let Some(egui_output) = egui_output {
             gui.update_gui_images(
                 &self.instance,

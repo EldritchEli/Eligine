@@ -13,7 +13,6 @@ use crate::{
         },
         framebuffer_util::{create_depth_objects, create_framebuffers},
         pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline},
-        queue_family_indices::QueueFamilyIndices,
         render_app::{self, AppData, FrameInfo},
         render_pass_util::create_render_pass,
         swapchain_util::{create_swapchain, create_swapchain_image_views},

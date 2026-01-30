@@ -17,7 +17,7 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
 }
 
 fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
-    let preferred_mode = if cfg!(target_os = "macos") {
+    let preferred_mode = if false {
         vk::PresentModeKHR::MAILBOX
     } else {
         vk::PresentModeKHR::IMMEDIATE

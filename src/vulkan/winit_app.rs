@@ -7,6 +7,7 @@
 )]
 use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
+use crate::vulkan::queue_family_indices::QueueFamilyIndices;
 use crate::vulkan::render_app::App;
 use anyhow::anyhow;
 
@@ -78,6 +79,7 @@ impl WinitWrapper {
             AppState::Uninitialized { init } => {
                 let mut app = unsafe { App::create(&window).unwrap() };
                 init(&mut app);
+
                 if let Some(ctx) = gui_ctx {
                     let pixels_per_point = ctx.pixels_per_point();
                     let mut gui = Gui::new(event_loop, ctx, &window)?;
@@ -141,6 +143,8 @@ impl ApplicationHandler for WinitWrapper {
             }
             AppState::Initialized { app } => app,
         };
+        let a =
+            unsafe { QueueFamilyIndices::get(&app.instance, &app.data, app.data.physical_device) };
 
         let elapsed = app.start.elapsed().as_secs_f32();
         let dt = elapsed - app.time_stamp;
@@ -184,7 +188,7 @@ impl ApplicationHandler for WinitWrapper {
             WindowEvent::RedrawRequested => {
                 let window = &self.window.as_ref().unwrap();
                 let output = if gui.enabled {
-                    Some(gui.run_egui(&mut app.data, &mut app.scene, window, &event))
+                    Some(gui.run_egui(&mut app.data, &mut app.scene, window))
                 } else {
                     None
                 };

@@ -19,13 +19,14 @@ impl QueueFamilyIndices {
         data: &AppData,
         physical_device: vk::PhysicalDevice,
     ) -> anyhow::Result<Self> {
+        println!("before swap");
         let properties = instance.get_physical_device_queue_family_properties(physical_device);
-
+        println!("after first");
         let graphics = properties
             .iter()
             .position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS))
             .map(|i| i as u32);
-
+        println!("after properties");
         let mut present = None;
         for (index, _properties) in properties.iter().enumerate() {
             if instance.get_physical_device_surface_support_khr(

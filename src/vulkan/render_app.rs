@@ -1,4 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
+use crate::game_objects::skybox::SkyBox;
 use crate::gltf;
 use crate::gui::gui::{Gui, create_gui_descriptor_sets};
 use crate::vulkan::command_buffer_util::{create_command_buffer, create_command_buffers};
@@ -14,6 +15,7 @@ use crate::vulkan::device_util::{create_logical_device, pick_physical_device};
 use crate::vulkan::framebuffer_util::{create_depth_objects, create_framebuffers};
 use crate::vulkan::instance_util::create_instance;
 use crate::vulkan::pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline};
+use crate::vulkan::queue_family_indices::QueueFamilyIndices;
 use crate::vulkan::render_pass_util::create_render_pass;
 use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::vulkan::sync_util::create_sync_objects;
@@ -21,12 +23,11 @@ use crate::vulkan::uniform_buffer_object::{
     GlobalUniform, OrthographicLight, PbrPushConstant, PbrUniform, UniformBuffer,
 };
 use crate::vulkan::vertexbuffer_util::VertexPbr;
-use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE, MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
+use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
 use bevy::ecs::resource::Resource;
-use egui::{FullOutput, TexturesDelta};
+use egui::FullOutput;
 use log::info;
-use std::f32::consts::PI;
 use std::path::Path;
 use std::time::Instant;
 use vulkanalia::loader::{LIBRARY, LibloadingLoader};
@@ -58,9 +59,32 @@ pub struct App {
     pub start: Instant,
     pub time_stamp: f32,
 }
+#[derive(Debug, Resource)]
+pub struct FrameInfo {
+    pub resized: bool,
+    pub frame: usize,
+    pub start: Instant,
+    pub time_stamp: f32,
+}
 
+impl App {
+    pub fn load_skybox(&mut self) -> SkyBox {
+        SkyBox::load(
+            &self.instance,
+            &self.device,
+            &mut self.data,
+            "assets/skyboxes/pretty_sky/py.png",
+            "assets/skyboxes/pretty_sky/ny.png",
+            "assets/skyboxes/pretty_sky/pz.png",
+            "assets/skyboxes/pretty_sky/nz.png",
+            "assets/skyboxes/pretty_sky/nx.png",
+            "assets/skyboxes/pretty_sky/px.png",
+        )
+        .unwrap()
+    }
+}
 /// The Vulkan handles and associated properties used by our Vulkan app.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Resource)]
 pub struct AppData {
     pub recreated: bool,
     pub surface: vk::SurfaceKHR,
@@ -186,6 +210,8 @@ impl App {
 
     unsafe fn recreate_swapchain(&mut self, window: &Window, gui: &mut Gui) -> anyhow::Result<()> {
         info!("recreated swapchain");
+
+        println!("process start");
         self.device.device_wait_idle()?;
         self.destroy_swapchain();
         create_swapchain(window, &self.instance, &self.device, &mut self.data)?;

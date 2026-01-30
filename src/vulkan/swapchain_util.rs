@@ -52,13 +52,15 @@ pub unsafe fn create_swapchain(
     device: &Device,
     data: &mut AppData,
 ) -> anyhow::Result<()> {
+    println!("before family indices");
     let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
+    println!("after indices");
     let support = SwapchainSupport::get(instance, data, data.physical_device)?;
-
+    println!("after support");
     let surface_format = get_swapchain_surface_format(&support.formats);
     let present_mode = get_swapchain_present_mode(&support.present_modes);
     let extent = get_swapchain_extent(window, support.capabilities);
-
+    println!("after extend");
     let mut image_count = support.capabilities.min_image_count + 1;
     if support.capabilities.max_image_count != 0
         && image_count > support.capabilities.max_image_count

@@ -2,23 +2,16 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use bevy::{
-    ecs::{
-        entity::Entity,
-        query::With,
-        resource::Resource,
-        system::{Commands, NonSend, Query, Res},
-        world::World,
-    },
+    core_pipeline::core_2d::graph::input,
+    ecs::{entity::Entity, query::With, system::ResMut, world::World},
     window::PrimaryWindow,
-    winit::{DisplayHandleWrapper, EventLoopProxyWrapper, WinitWindows},
+    winit::{DisplayHandleWrapper, WINIT_WINDOWS},
 };
 use egui::{
-    ClippedPrimitive, Color32, FullOutput, Pos2, Rect, RichText, SidePanel, TextureId,
-    TexturesDelta, Ui, ViewportInfo,
+    ClippedPrimitive, FullOutput, Pos2, Rect, SidePanel, TextureId, TexturesDelta, Ui, ViewportInfo,
 };
 use egui_winit::{apply_viewport_builder_to_window, create_winit_window_attributes};
 use glam::{U8Vec4, Vec2};
-use gltf::mesh::util::indices;
 use itertools::Either;
 use log::info;
 use vulkanalia::{
@@ -28,7 +21,8 @@ use vulkanalia::{
 use winit::window;
 
 use crate::{
-    game_objects::scene::Scene,
+    bevy_app::render,
+    game_objects::{render_object, scene::Scene},
     gui::{
         gui, menu,
         objects::{self, selected_object},
@@ -36,7 +30,7 @@ use crate::{
     vulkan::{
         image_util::TextureData,
         input_state::InputState,
-        render_app::AppData,
+        render_app::{App, AppData},
         uniform_buffer_object::GlobalUniform,
         vertexbuffer_util::{VertexData, VertexGui},
     },
@@ -153,34 +147,26 @@ impl std::fmt::Debug for Gui {
 
 pub fn create_gui_from_window(world: &mut World) {
     let mut primary_window_query = world.query_filtered::<Entity, With<PrimaryWindow>>();
-    let winit_windows = world
-        .get_non_send_resource::<NonSend<WinitWindows>>()
-        .unwrap();
-    let display_handle = world.get_resource::<DisplayHandleWrapper>().unwrap();
-    // 2. Access the WinitWindows resource (Main Thread only)
-    let window = if let Ok(window_entity) = primary_window_query.single(world) &&
-            // Use the entity to look up the actual winit windo
-            let Some(winit_window) = winit_windows.get_window(window_entity)
-    {
-        // Now you have the raw winit instance!
-        winit_window.deref()
-    } else {
-        panic!("failed to get window context")
-    };
-    let egui_ctx = egui::Context::default();
-    let viewport_builder = egui::viewport::ViewportBuilder::default()
-        .with_title("Eligine")
-        .with_inner_size(egui::Vec2::new(1024.0, 768.0));
+    let window_entity = primary_window_query.single(world).unwrap();
+    let (egui_ctx, viewport_id, scale_factor) = WINIT_WINDOWS.with_borrow(|windows| {
+        let window = windows.get_window(window_entity).unwrap();
+        let egui_ctx = egui::Context::default();
+        let viewport_builder = egui::viewport::ViewportBuilder::default()
+            .with_title("Eligine")
+            .with_inner_size(egui::Vec2::new(1024.0, 768.0));
+        let window_attributes = create_winit_window_attributes(&egui_ctx, viewport_builder.clone());
+        apply_viewport_builder_to_window(&egui_ctx, window, &viewport_builder);
+        let viewport_id = egui_ctx.viewport_id();
+        (egui_ctx, viewport_id, window.scale_factor())
+    });
 
-    let window_attributes = create_winit_window_attributes(&egui_ctx, viewport_builder.clone());
-    apply_viewport_builder_to_window(&egui_ctx, window, &viewport_builder);
-    let event_loop = &display_handle.0;
-    let viewport_id = egui_ctx.viewport_id();
+    let display_handle = world.get_resource::<DisplayHandleWrapper>().unwrap();
+    let display = &display_handle.0;
     let egui_state = egui_winit::State::new(
         egui_ctx,
         viewport_id,
-        event_loop,
-        Some(window.scale_factor() as f32),
+        display,
+        Some(scale_factor as f32),
         Some(winit::window::Theme::Dark),
         None,
     );
@@ -250,7 +236,6 @@ impl Gui {
         data: &mut AppData,
         scene: &mut Scene,
         window: &window::Window,
-        event: &winit::event::WindowEvent,
     ) -> FullOutput {
         // Each frame:
 
@@ -258,6 +243,51 @@ impl Gui {
 
         egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
         self.run_egui_fst(data, scene, window)
+
+        // handle full_output
+    }
+
+    pub fn old_run_egui_bevy(&mut self, app: &mut App, window: &window::Window) -> FullOutput {
+        // Each frame:
+        let input = if let Some(viewport_info) = self.viewport_info.as_mut() {
+            egui_winit::update_viewport_info(
+                viewport_info,
+                self.egui_state.egui_ctx(),
+                window,
+                false,
+            );
+            self.egui_state.take_egui_input(window)
+        } else {
+            let input = self.egui_state.take_egui_input(window);
+            self.viewport_info = Some(input.viewport().clone());
+            //self.init_gui_mesh(&app.instance, &app.device, &mut app.data, output, pixels_per_point)
+            input
+        };
+
+        self.egui_state.egui_ctx().run(input, |ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new())
+                .show(ctx, |ui| {
+                    self.callback = show(&mut app.data, &mut app.scene, ctx, ui)
+                });
+        })
+
+        // handle full_output
+
+        // handle full_output
+    }
+    pub fn run_egui_bevy(
+        &mut self,
+        mut data: ResMut<AppData>,
+        mut scene: ResMut<Scene>,
+        window: &window::Window,
+    ) -> FullOutput {
+        let viewport_info = self.viewport_info.as_mut().unwrap();
+
+        egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
+        self.run_egui_fst(&mut data, &mut scene, window)
+
+        // handle full_output
 
         // handle full_output
     }
@@ -387,6 +417,9 @@ impl Gui {
         pixels_per_point: f32,
         image_index: usize,
     ) -> anyhow::Result<()> {
+        if self.render_objects.is_empty() {
+            return self.init_gui_mesh(instance, device, data, output, pixels_per_point);
+        }
         let render_objects = &mut self.render_objects[image_index];
         let texture_id: Vec<(TextureId, Rect)> = output
             .clone()

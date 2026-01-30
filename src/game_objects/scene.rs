@@ -3,6 +3,7 @@ use crate::game_objects::skybox::SkyBox;
 use crate::vulkan::input_state::{self, InputState};
 use crate::vulkan::uniform_buffer_object::OrthographicLight;
 use crate::vulkan::vertexbuffer_util::VertexPbr;
+use bevy::ecs::resource::Resource;
 use glam::Mat4;
 use slab::{IntoIter, Iter, IterMut, Slab};
 use vulkanalia::vk::{self};
@@ -110,7 +111,7 @@ impl GameObject {
         parent.global_matrix(scene) * self.transform.matrix()
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Resource)]
 pub struct Scene {
     pub(crate) camera: Camera,
     pub render_objects: RenderSlab,

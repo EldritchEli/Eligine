@@ -1,6 +1,7 @@
 use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
 use bevy::ecs::resource::Resource;
 use glam::{Vec2, vec2};
+use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
@@ -92,24 +93,18 @@ pub struct InputState {
 }
 
 impl InputState {
-    /*pub(crate) fn new() -> Self {
-        Self::default()
-    }*/
-    pub fn set_mouse_delta(&mut self, event: &WindowEvent) {
-        if let WindowEvent::CursorMoved { position, .. } = event {
-            self.mouse_delta = vec2(
-                position.x as f32 - self.mouse_position.x,
-                position.y as f32 - self.mouse_position.y,
-            );
-        }
+    pub fn set_mouse(&mut self, position: &PhysicalPosition<f64>) {
+        self.mouse_delta = vec2(
+            position.x as f32 - self.mouse_position.x,
+            position.y as f32 - self.mouse_position.y,
+        );
+        self.mouse_position = vec2(position.x as f32, position.y as f32);
     }
     pub fn reset_mouse_delta(&mut self) {
         self.mouse_delta = Vec2::ZERO
     }
     fn set_mouse_position(&mut self, event: &WindowEvent) {
-        if let WindowEvent::CursorMoved { position, .. } = event {
-            self.mouse_position = vec2(position.x as f32, position.y as f32);
-        }
+        if let WindowEvent::CursorMoved { position, .. } = event {}
     }
 
     fn set_mouse_scroll_delta(&mut self, event: &WindowEvent) {
@@ -123,186 +118,164 @@ impl InputState {
         }
     }
 
-    pub fn read_event(&mut self, event: &WindowEvent) -> Option<()> {
-        self.set_mouse_delta(event);
-        self.set_mouse_position(event);
-        self.set_mouse_scroll_delta(event);
+    pub fn read_event(&mut self, event: &WindowEvent) {
+        //self.set_mouse_position(event);
+        //self.set_mouse_scroll_delta(event);
         match event {
             WindowEvent::MouseInput {
                 device_id: _,
                 state,
                 button,
-            } => {
-                match button {
-                    MouseButton::Left => {
-                        self.mouse_left = InputState::set_mouse_key(&self.mouse_left, button, state)
-                    }
-                    MouseButton::Right => {
-                        self.mouse_right =
-                            InputState::set_mouse_key(&self.mouse_right, button, state)
-                    }
-                    MouseButton::Middle => {
-                        self.mouse_middle =
-                            InputState::set_mouse_key(&self.mouse_middle, button, state)
-                    }
-                    _ => {}
+            } => match button {
+                MouseButton::Left => {
+                    self.mouse_left = InputState::set_mouse_key(&self.mouse_left, button, state)
                 }
-                Some(())
-            }
-
+                MouseButton::Right => {
+                    self.mouse_right = InputState::set_mouse_key(&self.mouse_right, button, state)
+                }
+                MouseButton::Middle => {
+                    self.mouse_middle = InputState::set_mouse_key(&self.mouse_middle, button, state)
+                }
+                _ => {}
+            },
+            WindowEvent::CursorMoved { position, .. } => self.set_mouse(position),
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
                         state,
-                        physical_key,
+                        physical_key: PhysicalKey::Code(key),
+                        repeat,
                         ..
                     },
                 ..
             } => {
-                self.set_key_state(state, physical_key);
-                Some(())
+                if !repeat {
+                    self.set_key_state(state, key);
+                } else {
+                    println!("repeat key: {:?}", key)
+                }
             }
-            _ => None,
+            _ => (),
         }
     }
-    pub fn set_key_state(&mut self, state: &ElementState, physical: &PhysicalKey) {
-        if let PhysicalKey::Code(key) = physical {
-            match key {
-                KeyCode::AltLeft => {
-                    self.key_alt = InputState::set_key(&self.key_alt, key, state);
-                }
-                KeyCode::AltRight => {
-                    self.key_alt = InputState::set_key(&self.key_alt, key, state);
-                }
-                KeyCode::ShiftLeft => {
-                    self.key_shift = InputState::set_key(&self.key_shift, key, state);
-                }
-                KeyCode::ShiftRight => {
-                    self.key_shift = InputState::set_key(&self.key_shift, key, state);
-                }
-                KeyCode::KeyW => {
-                    self.key_w = InputState::set_key(&self.key_w, key, state);
-                }
-                KeyCode::KeyA => {
-                    self.key_a = InputState::set_key(&self.key_a, key, state);
-                }
-                KeyCode::KeyD => {
-                    self.key_d = InputState::set_key(&self.key_d, key, state);
-                }
-                KeyCode::KeyQ => {
-                    self.key_q = InputState::set_key(&self.key_q, key, state);
-                }
-                KeyCode::KeyE => {
-                    self.key_e = InputState::set_key(&self.key_e, key, state);
-                }
-                KeyCode::KeyZ => {
-                    self.key_z = InputState::set_key(&self.key_z, key, state);
-                }
-                KeyCode::KeyX => {
-                    self.key_x = InputState::set_key(&self.key_x, key, state);
-                }
-                KeyCode::KeyC => {
-                    self.key_c = InputState::set_key(&self.key_c, key, state);
-                }
-                KeyCode::KeyV => {
-                    self.key_v = InputState::set_key(&self.key_v, key, state);
-                }
-                KeyCode::Escape => {
-                    self.key_esc = InputState::set_key(&self.key_esc, key, state);
-                }
-                KeyCode::KeyS => {
-                    self.key_s = InputState::set_key(&self.key_s, key, state);
-                }
-                KeyCode::Space => {
-                    self.key_space = InputState::set_key(&self.key_space, key, state);
-                }
-                KeyCode::Digit0 => {
-                    self.key0 = InputState::set_key(&self.key0, key, state);
-                }
-                KeyCode::Digit1 => {
-                    self.key1 = InputState::set_key(&self.key1, key, state);
-                }
-                KeyCode::Digit2 => {
-                    self.key2 = InputState::set_key(&self.key2, key, state);
-                }
-                KeyCode::Digit3 => {
-                    self.key3 = InputState::set_key(&self.key3, key, state);
-                }
-                KeyCode::Digit4 => {
-                    self.key4 = InputState::set_key(&self.key4, key, state);
-                }
-                KeyCode::Digit5 => {
-                    self.key5 = InputState::set_key(&self.key5, key, state);
-                }
-                KeyCode::Digit6 => {
-                    self.key6 = InputState::set_key(&self.key6, key, state);
-                }
-                KeyCode::Digit7 => {
-                    self.key7 = InputState::set_key(&self.key7, key, state);
-                }
-                KeyCode::Digit8 => {
-                    self.key8 = InputState::set_key(&self.key8, key, state);
-                }
-                KeyCode::Digit9 => {
-                    self.key9 = InputState::set_key(&self.key9, key, state);
-                }
-                KeyCode::ArrowRight => {
-                    self.key_right = InputState::set_key(&self.key_right, key, state);
-                }
-                KeyCode::ArrowLeft => {
-                    self.key_left = InputState::set_key(&self.key_left, key, state);
-                }
-                KeyCode::ArrowUp => {
-                    self.key_up = InputState::set_key(&self.key_up, key, state);
-                }
-                KeyCode::ArrowDown => {
-                    self.key_down = InputState::set_key(&self.key_down, key, state);
-                }
-                KeyCode::Backspace => {
-                    self.key_backspace = InputState::set_key(&self.key_backspace, key, state);
-                }
-                KeyCode::F1 => self.f1 = InputState::set_key(&self.f1, key, state),
-                KeyCode::F2 => self.f2 = InputState::set_key(&self.f2, key, state),
-                KeyCode::F3 => self.f3 = InputState::set_key(&self.f3, key, state),
-                KeyCode::F4 => self.f4 = InputState::set_key(&self.f4, key, state),
-                KeyCode::F5 => self.f5 = InputState::set_key(&self.f5, key, state),
-                KeyCode::F6 => self.f6 = InputState::set_key(&self.f6, key, state),
-                KeyCode::F7 => self.f7 = InputState::set_key(&self.f7, key, state),
-                KeyCode::F8 => self.f8 = InputState::set_key(&self.f8, key, state),
-                KeyCode::F9 => self.f9 = InputState::set_key(&self.f9, key, state),
-                KeyCode::F10 => self.f10 = InputState::set_key(&self.f10, key, state),
-                KeyCode::F11 => self.f11 = InputState::set_key(&self.f11, key, state),
-                KeyCode::F12 => self.f12 = InputState::set_key(&self.f12, key, state),
-
-                a => println!("{:?} {:?}", a, state),
+    pub fn set_key_state(&mut self, state: &ElementState, key: &KeyCode) {
+        match key {
+            KeyCode::AltLeft => {
+                self.key_alt = InputState::set_key(state);
             }
+            KeyCode::AltRight => {
+                self.key_alt = InputState::set_key(state);
+            }
+            KeyCode::ShiftLeft => {
+                self.key_shift = InputState::set_key(state);
+            }
+            KeyCode::ShiftRight => {
+                self.key_shift = InputState::set_key(state);
+            }
+            KeyCode::KeyW => {
+                self.key_w = InputState::set_key(state);
+            }
+            KeyCode::KeyA => {
+                self.key_a = InputState::set_key(state);
+            }
+            KeyCode::KeyD => {
+                self.key_d = InputState::set_key(state);
+            }
+            KeyCode::KeyQ => {
+                self.key_q = InputState::set_key(state);
+            }
+            KeyCode::KeyE => {
+                self.key_e = InputState::set_key(state);
+            }
+            KeyCode::KeyZ => {
+                self.key_z = InputState::set_key(state);
+            }
+            KeyCode::KeyX => {
+                self.key_x = InputState::set_key(state);
+            }
+            KeyCode::KeyC => {
+                self.key_c = InputState::set_key(state);
+            }
+            KeyCode::KeyV => {
+                self.key_v = InputState::set_key(state);
+            }
+            KeyCode::Escape => {
+                self.key_esc = InputState::set_key(state);
+            }
+            KeyCode::KeyS => {
+                self.key_s = InputState::set_key(state);
+            }
+            KeyCode::Space => {
+                self.key_space = InputState::set_key(state);
+            }
+            KeyCode::Digit0 => {
+                self.key0 = InputState::set_key(state);
+            }
+            KeyCode::Digit1 => {
+                self.key1 = InputState::set_key(state);
+            }
+            KeyCode::Digit2 => {
+                self.key2 = InputState::set_key(state);
+            }
+            KeyCode::Digit3 => {
+                self.key3 = InputState::set_key(state);
+            }
+            KeyCode::Digit4 => {
+                self.key4 = InputState::set_key(state);
+            }
+            KeyCode::Digit5 => {
+                self.key5 = InputState::set_key(state);
+            }
+            KeyCode::Digit6 => {
+                self.key6 = InputState::set_key(state);
+            }
+            KeyCode::Digit7 => {
+                self.key7 = InputState::set_key(state);
+            }
+            KeyCode::Digit8 => {
+                self.key8 = InputState::set_key(state);
+            }
+            KeyCode::Digit9 => {
+                self.key9 = InputState::set_key(state);
+            }
+            KeyCode::ArrowRight => {
+                self.key_right = InputState::set_key(state);
+            }
+            KeyCode::ArrowLeft => {
+                self.key_left = InputState::set_key(state);
+            }
+            KeyCode::ArrowUp => {
+                self.key_up = InputState::set_key(state);
+            }
+            KeyCode::ArrowDown => {
+                self.key_down = InputState::set_key(state);
+            }
+            KeyCode::Backspace => {
+                self.key_backspace = InputState::set_key(state);
+            }
+            KeyCode::F1 => self.f1 = InputState::set_key(state),
+            KeyCode::F2 => self.f2 = InputState::set_key(state),
+            KeyCode::F3 => self.f3 = InputState::set_key(state),
+            KeyCode::F4 => self.f4 = InputState::set_key(state),
+            KeyCode::F5 => self.f5 = InputState::set_key(state),
+            KeyCode::F6 => self.f6 = InputState::set_key(state),
+            KeyCode::F7 => self.f7 = InputState::set_key(state),
+            KeyCode::F8 => self.f8 = InputState::set_key(state),
+            KeyCode::F9 => self.f9 = InputState::set_key(state),
+            KeyCode::F10 => self.f10 = InputState::set_key(state),
+            KeyCode::F11 => self.f11 = InputState::set_key(state),
+            KeyCode::F12 => self.f12 = InputState::set_key(state),
+            _ => {}
         }
     }
 
-    fn set_key(current_state: &KeyState, _l_key: &KeyCode, input_state: &ElementState) -> KeyState {
+    fn set_key(input_state: &ElementState) -> KeyState {
         match input_state {
             ElementState::Released => {
                 //println!("Releasing {:?}", l_key);
                 Release
             }
-            ElementState::Pressed => match current_state {
-                Release => {
-                    //println!("Entering {:?}", l_key);
-                    Enter
-                }
-                Enter => {
-                    //println!("Holding {:?}", l_key);
-                    Hold
-                }
-                Hold => {
-                    //println!("Holding {:?}", l_key);
-                    Hold
-                }
-                Nothing => {
-                    //println!("Entering {:?}", l_key);
-                    Enter
-                }
-            },
+            ElementState::Pressed => Enter,
         }
     }
     fn set_mouse_key(

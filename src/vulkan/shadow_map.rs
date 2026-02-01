@@ -7,8 +7,8 @@ use vulkanalia::{
 use crate::vulkan::{
     framebuffer_util::get_depth_format,
     image_util::{TextureData, create_image, create_image_view},
-    render_app::AppData,
     shader_module_util::create_shader_module,
+    winit_render_app::AppData,
 };
 
 #[derive(Clone, Debug)]

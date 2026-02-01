@@ -1,7 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::game_objects::scene::Scene;
 use crate::gui::gui::Gui;
-use crate::vulkan::render_app::AppData;
+use crate::vulkan::winit_render_app::AppData;
 use egui::Rect;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, vk};

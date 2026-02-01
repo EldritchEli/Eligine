@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use crate::{
     bevy_app::render::{destroy, render},
-    game_objects::{camera::update_camera_and_gui, scene::Scene},
+    game_objects::scene::Scene,
     gui::gui::{Gui, create_gui_from_window},
     vulkan::{
         color_objects::create_color_objects,
@@ -18,10 +18,10 @@ use crate::{
         input_state::InputState,
         instance_util::create_instance,
         pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline},
-        render_app::{self, AppData, FrameInfo},
         render_pass_util::create_render_pass,
         swapchain_util::{create_swapchain, create_swapchain_image_views},
         sync_util::create_sync_objects,
+        winit_render_app::{self, AppData, FrameInfo},
     },
 };
 use bevy::{
@@ -164,34 +164,7 @@ pub fn create_vulkan_resources(
     });
 }
 
-fn init_gui(
-    mut gui: NonSendMut<Gui>,
-    instance: Res<VkInstance>,
-    device: Res<VkDevice>,
-    mut data: ResMut<render_app::AppData>,
-    mut scene: ResMut<Scene>,
-
-    window_query: Query<Entity, With<PrimaryWindow>>,
-) {
-    let w_id = window_query.single().unwrap();
-    WINIT_WINDOWS.with_borrow(|windows| {
-        if let Some(window) = windows.get_window(w_id) {
-            let ppp = gui.egui_state.egui_ctx().pixels_per_point();
-            let output = gui.run_egui_fst(&mut data, &mut scene, &window);
-            gui.update_gui_images(
-                &instance.inner,
-                &device.inner,
-                &mut data,
-                &output.textures_delta,
-            )
-            .unwrap();
-            gui.init_gui_mesh(&instance.inner, &device.inner, &mut data, &output, ppp)
-                .unwrap();
-        }
-    });
-}
-
-fn create_render_app(
+pub fn create_render_app(
     mut commands: Commands,
     window_query: Query<Entity, With<PrimaryWindow>>,
     mut writer: MessageWriter<RequestRedraw>,
@@ -200,7 +173,7 @@ fn create_render_app(
     let w_id = window_query.single().unwrap();
     WINIT_WINDOWS.with_borrow(|windows| {
         if let Some(window) = windows.get_window(w_id) {
-            commands.insert_resource(unsafe { render_app::App::create(window).unwrap() });
+            commands.insert_resource(unsafe { winit_render_app::App::create(window).unwrap() });
             writer.write(RequestRedraw);
         } else {
             println!("failed to find window")
@@ -214,7 +187,7 @@ pub fn process_raw_winit_events(
     mut input_state: ResMut<InputState>,
     mut gui: NonSendMut<Gui>,
     window_query: Query<Entity, With<PrimaryWindow>>,
-    mut app: ResMut<render_app::App>,
+    mut app: ResMut<winit_render_app::App>,
     mut event_reader: MessageReader<RawWinitWindowEvent>,
     time: Res<Time>,
 ) {
@@ -233,10 +206,11 @@ pub fn process_raw_winit_events(
                     _ => {}
                 }
                 let response = gui.egui_state.on_window_event(window, &event.event);
+
                 input_state.read_event(&event.event);
             }
             gui.set_enabled(&mut input_state);
-            app.scene.update(0.012, &input_state);
+            app.scene.update(time.delta_secs(), &input_state);
             input_state.reset_mouse_delta();
         }
     });
@@ -244,7 +218,7 @@ pub fn process_raw_winit_events(
 
 pub fn destroy_renderer(
     gui: NonSendMut<Gui>,
-    mut app: ResMut<render_app::App>,
+    mut app: ResMut<winit_render_app::App>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
     mut event_reader: MessageReader<WindowCloseRequested>,
 ) {
@@ -264,7 +238,7 @@ pub fn destroy_renderer(
 }
 pub fn redraw(
     gui: NonSendMut<Gui>,
-    mut app: ResMut<render_app::App>,
+    mut app: ResMut<winit_render_app::App>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
     mut event_reader: MessageReader<RequestRedraw>,
 ) {
@@ -283,10 +257,10 @@ pub fn redraw(
         }; /*if !output.textures_delta.is_empty() {
         gui.new_texture_delta.push(output.textures_delta.clone())
         }*/
-        unsafe { app.render(window, &mut gui, output) }.unwrap();
+        unsafe { crate::bevy_app::render::render(&mut app, window, &mut gui, output) }.unwrap();
     })
 }
-pub fn process_window_event(
+/*pub fn process_window_event(
     gui: NonSendMut<Gui>,
     mut data: ResMut<AppData>,
     instance: Res<VkInstance>,
@@ -362,7 +336,7 @@ pub fn process_window_event(
             {}
     }
 }
-/*
+
     PanicHandlerPlugin
     LogPlugin - with feature bevy_log
     TaskPoolPlugin

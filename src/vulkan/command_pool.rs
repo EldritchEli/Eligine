@@ -1,7 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::queue_family_indices::QueueFamilyIndices;
-use crate::vulkan::render_app::AppData;
+use crate::vulkan::winit_render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, Instance, vk};
 

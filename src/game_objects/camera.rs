@@ -13,7 +13,7 @@ use winit::event::MouseScrollDelta;
 use crate::game_objects::transform::{self, Transform};
 use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
-use crate::vulkan::render_app::{self, AppData};
+use crate::vulkan::winit_render_app::{self, AppData};
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE};
 use std::cmp::PartialEq;
 use std::f32::consts::PI;
@@ -161,7 +161,7 @@ impl Default for Camera {
 }
 
 pub fn update_camera_and_gui(
-    mut app: ResMut<render_app::App>,
+    mut app: ResMut<winit_render_app::App>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut mouse_delta: MessageReader<MouseMotion>,

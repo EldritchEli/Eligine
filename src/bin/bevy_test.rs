@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use VulcanEngine_0::{
     bevy_app,
     game_objects::{skybox::SkyBox, transform::Transform},
-    vulkan::render_app,
+    vulkan::winit_render_app,
 };
 use bevy::{
     app::{App, PostStartup, Startup},
@@ -21,7 +21,7 @@ pub fn main() {
         .run();
 }
 
-fn add_objects(mut app: ResMut<render_app::App>) {
+fn add_objects(mut app: ResMut<winit_render_app::App>) {
     let _paths = [
         //"assets/bird_orange.glb",
         //"assets/living_room/Rubiks Cube.glb",

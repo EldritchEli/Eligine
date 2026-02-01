@@ -1,9 +1,10 @@
+use crate::game_objects::material::Material;
 use crate::game_objects::scene::Sun;
 use crate::vulkan::descriptor_util::{create_pbr_descriptor_sets, create_uniform_buffers};
 use crate::vulkan::image_util::TextureData;
-use crate::vulkan::render_app::AppData;
 use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, PbrUniform};
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexData};
+use crate::vulkan::winit_render_app::AppData;
 use glam::Vec4;
 use terrors::OneOf;
 

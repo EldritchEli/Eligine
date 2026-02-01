@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::image_util::create_image_view;
-use crate::vulkan::{queue_family_indices::QueueFamilyIndices, render_app::AppData};
+use crate::vulkan::{queue_family_indices::QueueFamilyIndices, winit_render_app::AppData};
 use vulkanalia::vk::{Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
 use vulkanalia::{Device, Instance, vk};
 use winit::window::Window;
@@ -17,7 +17,7 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
 }
 
 fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
-    let preferred_mode = if false {
+    let preferred_mode = if cfg!(target_os = "macos") {
         vk::PresentModeKHR::MAILBOX
     } else {
         vk::PresentModeKHR::IMMEDIATE

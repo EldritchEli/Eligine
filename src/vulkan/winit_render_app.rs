@@ -15,7 +15,6 @@ use crate::vulkan::device_util::{create_logical_device, pick_physical_device};
 use crate::vulkan::framebuffer_util::{create_depth_objects, create_framebuffers};
 use crate::vulkan::instance_util::create_instance;
 use crate::vulkan::pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline};
-use crate::vulkan::queue_family_indices::QueueFamilyIndices;
 use crate::vulkan::render_pass_util::create_render_pass;
 use crate::vulkan::swapchain_util::{create_swapchain, create_swapchain_image_views};
 use crate::vulkan::sync_util::create_sync_objects;
@@ -208,7 +207,11 @@ impl App {
         game_object_ids
     }
 
-    unsafe fn recreate_swapchain(&mut self, window: &Window, gui: &mut Gui) -> anyhow::Result<()> {
+    pub unsafe fn recreate_swapchain(
+        &mut self,
+        window: &Window,
+        gui: &mut Gui,
+    ) -> anyhow::Result<()> {
         info!("recreated swapchain");
 
         println!("process start");
@@ -282,7 +285,7 @@ impl App {
         let proj = self.scene.camera.projection_matrix(&self.data, gui);
 
         self.data.pbr_push_contant = PbrPushConstant {
-            proj_inv_view: (view.inverse()),
+            proj_inv_view: view.inverse(),
         };
         for (_i, object) in self.scene.render_objects.iter() {
             let mut model = [Mat4::default(); 10];
@@ -361,8 +364,9 @@ impl App {
         }
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
-        //gui.cleanup_garbage(&self.device);
-        if let Some(egui_output) = egui_output {
+        if gui.egui_state.egui_ctx().has_requested_repaint()
+            && let Some(egui_output) = egui_output
+        {
             gui.update_gui_images(
                 &self.instance,
                 &self.device,
@@ -378,6 +382,7 @@ impl App {
                 gui.egui_state.egui_ctx().pixels_per_point(),
                 image_index,
             )?;
+            gui.needs_redraw = false;
         }
         self.update_uniform_buffer(image_index, window, gui)?;
 
@@ -436,7 +441,7 @@ impl App {
     }
 
     /// Destroys our Vulkan app.
-    pub(crate) unsafe fn destroy(&mut self, gui: &mut Gui) {
+    pub unsafe fn destroy(&mut self, gui: &mut Gui) {
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
         self.device

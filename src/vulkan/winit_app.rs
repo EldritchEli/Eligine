@@ -8,7 +8,7 @@
 use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::queue_family_indices::QueueFamilyIndices;
-use crate::vulkan::render_app::App;
+use crate::vulkan::winit_render_app::App;
 use anyhow::anyhow;
 
 use log::error;

@@ -1,5 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use crate::vulkan::render_app::AppData;
+use crate::vulkan::winit_render_app::AppData;
 use crate::vulkan::{PORTABILITY_MACOS_VERSION, VALIDATION_ENABLED, VALIDATION_LAYER};
 use anyhow::anyhow;
 use log::{debug, error, info, trace, warn};

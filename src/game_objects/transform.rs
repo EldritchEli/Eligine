@@ -1,7 +1,8 @@
+use bevy::ecs::component::Component;
 use glam::{Mat4, Quat, Vec3};
 use std::{f32::consts::PI, ops::Mul};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Component)]
 pub struct Transform {
     pub position: Vec3,
     pub scale: Vec3,

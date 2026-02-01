@@ -22,6 +22,7 @@ dependencies = [
  "nalgebra-glm",
  "png",
  "pretty_env_logger",
+ "serde",
  "slab",
  "terrors",
  "thiserror 1.0.69",

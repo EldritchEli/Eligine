@@ -38,4 +38,5 @@ mimalloc = "0.1.48"
 either = "1.15.0"
 glam = "0.31.0"
 tracing = "0.1.44"
+serde = "1.0.228"
 

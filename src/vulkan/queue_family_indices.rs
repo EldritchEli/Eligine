@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::device_util::SuitabilityError;
-use crate::vulkan::render_app::AppData;
+use crate::vulkan::winit_render_app::AppData;
 use anyhow::anyhow;
 use vulkanalia::vk::{InstanceV1_0, KhrSurfaceExtension};
 use vulkanalia::{Instance, vk};

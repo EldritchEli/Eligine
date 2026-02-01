@@ -5,7 +5,7 @@ use std::intrinsics::copy_nonoverlapping as memcpy;
 use crate::vulkan::buffer_util::{
     begin_single_time_commands, create_buffer, end_single_time_commands, get_memory_type_index,
 };
-use crate::vulkan::render_app::AppData;
+use crate::vulkan::winit_render_app::AppData;
 use anyhow::{Result, anyhow};
 
 use std::path::PathBuf;

@@ -31,9 +31,9 @@ use crate::{
     vulkan::{
         image_util::TextureData,
         input_state::InputState,
-        render_app::{App, AppData},
         uniform_buffer_object::GlobalUniform,
         vertexbuffer_util::{VertexData, VertexGui},
+        winit_render_app::{App, AppData},
     },
 };
 
@@ -130,6 +130,7 @@ pub struct Gui {
     pub egui_state: egui_winit::State,
     pub viewport_info: Option<ViewportInfo>,
     pub callback: Rect,
+    pub needs_redraw: bool,
 }
 
 impl std::fmt::Debug for Gui {
@@ -183,6 +184,7 @@ pub fn create_gui_from_window(world: &mut World) {
             min: Pos2::new(0.0, 0.0),
             max: Pos2::new(0.0, 0.0),
         },
+        needs_redraw: true,
     });
 }
 impl Gui {
@@ -229,6 +231,7 @@ impl Gui {
                 min: Pos2::new(0.0, 0.0),
                 max: Pos2::new(0.0, 0.0),
             },
+            needs_redraw: false,
         })
     }
 
@@ -238,14 +241,9 @@ impl Gui {
         scene: &mut Scene,
         window: &window::Window,
     ) -> FullOutput {
-        // Each frame:
-
         let viewport_info = self.viewport_info.as_mut().unwrap();
-
         egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
         self.run_egui_fst(data, scene, window)
-
-        // handle full_output
     }
 
     pub fn old_run_egui_bevy(&mut self, app: &mut App, window: &window::Window) -> FullOutput {
@@ -261,7 +259,6 @@ impl Gui {
         } else {
             let input = self.egui_state.take_egui_input(window);
             self.viewport_info = Some(input.viewport().clone());
-            //self.init_gui_mesh(&app.instance, &app.device, &mut app.data, output, pixels_per_point)
             input
         };
 
@@ -272,10 +269,6 @@ impl Gui {
                     self.callback = show(&mut app.data, &mut app.scene, ctx, ui)
                 });
         })
-
-        // handle full_output
-
-        // handle full_output
     }
     pub fn run_egui_bevy(
         &mut self,
@@ -287,10 +280,6 @@ impl Gui {
 
         egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
         self.run_egui_fst(&mut data, &mut scene, window)
-
-        // handle full_output
-
-        // handle full_output
     }
 
     pub fn run_egui_fst(
@@ -600,11 +589,19 @@ pub fn show(data: &mut AppData, scene: &mut Scene, ctx: &egui::Context, ui: &mut
             });
             ui.horizontal(|ui| {
                 ui.label("slerp_speed");
-                ui.add(egui::DragValue::new(&mut scene.camera.slerp_speed))
+                ui.add(
+                    egui::DragValue::new(&mut scene.camera.slerp_speed)
+                        .speed(0.01)
+                        .range(0.0..=1.0),
+                )
             });
             ui.horizontal(|ui| {
                 ui.label("lerp_speed");
-                ui.add(egui::DragValue::new(&mut scene.camera.lerp_speed))
+                ui.add(
+                    egui::DragValue::new(&mut scene.camera.lerp_speed)
+                        .speed(0.01)
+                        .range(0.0..=1.0),
+                )
             });
         });
 

@@ -2,7 +2,7 @@
 use crate::vulkan::swapchain_util::SwapchainSupport;
 use crate::vulkan::{
     DEVICE_EXTENSIONS, PORTABILITY_MACOS_VERSION, VALIDATION_ENABLED, VALIDATION_LAYER,
-    queue_family_indices::QueueFamilyIndices, render_app::AppData,
+    queue_family_indices::QueueFamilyIndices, winit_render_app::AppData,
 };
 use anyhow::anyhow;
 use log::{info, warn};

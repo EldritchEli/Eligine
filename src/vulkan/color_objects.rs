@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::image_util::{create_image, create_image_view};
-use crate::vulkan::render_app::AppData;
+use crate::vulkan::winit_render_app::AppData;
 use vulkanalia::{Device, Instance, vk};
 
 pub unsafe fn create_color_objects(

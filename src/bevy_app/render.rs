@@ -1,5 +1,4 @@
-use std::intrinsics::copy_nonoverlapping as memcpy;
-
+#![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::{
     game_objects::scene::Scene,
     gui::gui::{Gui, create_gui_descriptor_sets},
@@ -13,15 +12,17 @@ use crate::{
         },
         framebuffer_util::{create_depth_objects, create_framebuffers},
         pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline},
-        render_app::{self, AppData, FrameInfo},
         render_pass_util::create_render_pass,
         swapchain_util::{create_swapchain, create_swapchain_image_views},
         uniform_buffer_object::{
             GlobalUniform, OrthographicLight, PbrPushConstant, PbrUniform, UniformBuffer,
         },
         vertexbuffer_util::VertexPbr,
+        winit_render_app::{self, AppData, FrameInfo},
     },
 };
+use anyhow::anyhow;
+use std::intrinsics::copy_nonoverlapping as memcpy;
 
 use egui::FullOutput;
 use glam::Mat4;
@@ -150,124 +151,120 @@ pub fn update_uniform_buffer(
 }
 
 /// Renders a frame for our Vulkan app.
-pub fn render(
-    instance: &Instance,
-    device: &Device,
-    data: &mut AppData,
-    scene: &mut Scene,
-    frame_info: &mut FrameInfo,
+pub unsafe fn render(
+    app: &mut winit_render_app::App,
     window: &Window,
     gui: &mut Gui,
     egui_output: Option<FullOutput>,
-) {
-    unsafe {
-        device
-            .wait_for_fences(&[data.in_flight_fences[frame_info.frame]], true, u64::MAX)
-            .unwrap();
+) -> anyhow::Result<()> {
+    app.device
+        .wait_for_fences(&[app.data.in_flight_fences[app.frame]], true, u64::MAX)?;
 
-        let result = device.acquire_next_image_khr(
-            data.swapchain,
-            u64::MAX,
-            data.image_available_semaphores[frame_info.frame],
-            vk::Fence::null(),
-        );
-        //let sem = data.image_available_semaphores[frame];
+    let result = app.device.acquire_next_image_khr(
+        app.data.swapchain,
+        u64::MAX,
+        app.data.image_available_semaphores[app.frame],
+        vk::Fence::null(),
+    );
+    //let sem = app.data.image_available_semaphores[app.frame];
 
-        let image_index = match result {
-            Ok((image_index, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
-                if cfg!(target_os = "macos") {
-                    image_index as usize
-                } else {
-                    return recreate_swapchain(instance, device, scene, data, window, gui);
-                }
-            }
-            Ok((image_index, _)) => {
-                //self.data.recreated = false;
+    let image_index = match result {
+        Ok((image_index, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
+            if cfg!(target_os = "macos") {
                 image_index as usize
+            } else {
+                return app.recreate_swapchain(window, gui);
             }
-            Err(vk::ErrorCode::OUT_OF_DATE_KHR) => {
-                return recreate_swapchain(instance, device, scene, data, window, gui);
-            }
-            Err(e) => {
-                error!("alien success code: {:?}", e);
-                return;
-            }
-        };
-
-        let image_in_flight = data.images_in_flight[image_index];
-        if !image_in_flight.is_null() {
-            device
-                .wait_for_fences(&[image_in_flight], true, u64::MAX)
-                .unwrap();
         }
-
-        data.images_in_flight[image_index] = data.in_flight_fences[frame_info.frame];
-        gui.cleanup_garbage(&device);
-        println!("before egui");
-        if let Some(egui_output) = egui_output {
-            println!("in egui");
-            gui.update_gui_images(&instance, &device, data, &egui_output.textures_delta)
-                .unwrap();
-            gui.update_gui_mesh(
-                &instance,
-                &device,
-                data,
-                &egui_output,
-                gui.egui_state.egui_ctx().pixels_per_point(),
-                image_index,
-            )
-            .unwrap();
+        Ok((image_index, _)) => {
+            //app.data.recreated = false;
+            image_index as usize
         }
-        println!("after egui");
-        update_uniform_buffer(image_index, device, scene, data, window, gui);
+        Err(vk::ErrorCode::OUT_OF_DATE_KHR) => return app.recreate_swapchain(window, gui),
+        Err(e) => return Err(anyhow!(e)),
+    };
 
-        println!("after update uniform");
-        let wait_semaphores = &[data.image_available_semaphores[frame_info.frame]];
-        let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        create_command_buffer(&device, scene, data, window, Some(gui), image_index).unwrap();
-        let command_buffers = &[data.command_centers[image_index].command_buffers[0]];
-        let signal_semaphores = &[data.render_finished_semaphores[frame_info.frame]];
-        let submit_info = vk::SubmitInfo::builder()
-            .wait_semaphores(wait_semaphores)
-            .wait_dst_stage_mask(wait_stages)
-            .command_buffers(command_buffers)
-            .signal_semaphores(signal_semaphores);
-
-        device
-            .reset_fences(&[data.in_flight_fences[frame_info.frame]])
-            .unwrap();
-
-        device
-            .queue_submit(
-                data.graphics_queue,
-                &[submit_info],
-                data.in_flight_fences[frame_info.frame],
-            )
-            .unwrap();
-
-        let swapchains = &[data.swapchain];
-        let image_indices = &[image_index as u32];
-        let present_info = vk::PresentInfoKHR::builder()
-            .wait_semaphores(signal_semaphores)
-            .swapchains(swapchains)
-            .image_indices(image_indices);
-        println!("before present");
-        let result = device.queue_present_khr(data.present_queue, &present_info);
-        let changed = result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR)
-            || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR);
-
-        if frame_info.resized || changed {
-            frame_info.resized = false;
-            println!("before recreate");
-            recreate_swapchain(instance, device, scene, data, window, gui);
-        } else if let Err(e) = result {
-            return error!("queue present error: {:?}", e);
-        }
-        println!("before queue idle");
-        device.queue_wait_idle(data.present_queue).unwrap();
-
-        frame_info.frame = (frame_info.frame + 1) % MAX_FRAMES_IN_FLIGHT;
+    let image_in_flight = app.data.images_in_flight[image_index];
+    if !image_in_flight.is_null() {
+        app.device
+            .wait_for_fences(&[image_in_flight], true, u64::MAX)?;
     }
+
+    app.data.images_in_flight[image_index] = app.data.in_flight_fences[app.frame];
+    if gui.egui_state.egui_ctx().has_requested_repaint()
+        && let Some(egui_output) = egui_output
+    {
+        gui.update_gui_images(
+            &app.instance,
+            &app.device,
+            &mut app.data,
+            &egui_output.textures_delta,
+        )
+        .unwrap();
+        gui.update_gui_mesh(
+            &app.instance,
+            &app.device,
+            &mut app.data,
+            &egui_output,
+            gui.egui_state.egui_ctx().pixels_per_point(),
+            image_index,
+        )?;
+        gui.needs_redraw = false;
+    }
+    app.update_uniform_buffer(image_index, window, gui)?;
+
+    let wait_semaphores = &[app.data.image_available_semaphores[app.frame]];
+    let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+    create_command_buffer(
+        &app.device,
+        &mut app.scene,
+        &mut app.data,
+        window,
+        Some(gui),
+        image_index,
+    )?;
+    let command_buffers = &[app.data.command_centers[image_index].command_buffers[0]];
+    let signal_semaphores = &[app.data.render_finished_semaphores[app.frame]];
+    let submit_info = vk::SubmitInfo::builder()
+        .wait_semaphores(wait_semaphores)
+        .wait_dst_stage_mask(wait_stages)
+        .command_buffers(command_buffers)
+        .signal_semaphores(signal_semaphores);
+
+    app.device
+        .reset_fences(&[app.data.in_flight_fences[app.frame]])?;
+
+    app.device
+        .queue_submit(
+            app.data.graphics_queue,
+            &[submit_info],
+            app.data.in_flight_fences[app.frame],
+        )
+        .unwrap();
+
+    let swapchains = &[app.data.swapchain];
+    let image_indices = &[image_index as u32];
+    let present_info = vk::PresentInfoKHR::builder()
+        .wait_semaphores(signal_semaphores)
+        .swapchains(swapchains)
+        .image_indices(image_indices);
+
+    let result = app
+        .device
+        .queue_present_khr(app.data.present_queue, &present_info);
+    let changed = result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR)
+        || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR);
+
+    if app.resized || changed {
+        app.resized = false;
+        app.recreate_swapchain(window, gui)?;
+    } else if let Err(e) = result {
+        return Err(anyhow!(e));
+    }
+    app.device.queue_wait_idle(app.data.present_queue)?;
+
+    app.frame = (app.frame + 1) % MAX_FRAMES_IN_FLIGHT;
+    Ok(())
 }
 
 /// Destroys our Vulkan app.

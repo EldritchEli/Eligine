@@ -22,7 +22,7 @@ use vulkanalia::{
 use winit::window;
 
 use crate::{
-    bevy_app::render,
+    bevy_app::render::{self, VulkanApp},
     game_objects::{render_object, scene::Scene},
     gui::{
         gui, menu,
@@ -131,6 +131,7 @@ pub struct Gui {
     pub viewport_info: Option<ViewportInfo>,
     pub callback: Rect,
     pub needs_redraw: bool,
+    pub output: Option<FullOutput>,
 }
 
 impl std::fmt::Debug for Gui {
@@ -185,6 +186,7 @@ pub fn create_gui_from_window(world: &mut World) {
             max: Pos2::new(0.0, 0.0),
         },
         needs_redraw: true,
+        output: None,
     });
 }
 impl Gui {
@@ -232,6 +234,7 @@ impl Gui {
                 max: Pos2::new(0.0, 0.0),
             },
             needs_redraw: false,
+            output: None,
         })
     }
 
@@ -246,7 +249,13 @@ impl Gui {
         self.run_egui_fst(data, scene, window)
     }
 
-    pub fn old_run_egui_bevy(&mut self, app: &mut App, window: &window::Window) -> FullOutput {
+    pub fn old_run_egui_bevy(
+        &mut self,
+        app: &mut VulkanApp,
+        data: &mut AppData,
+        scene: &mut Scene,
+        window: &window::Window,
+    ) {
         // Each frame:
         let input = if let Some(viewport_info) = self.viewport_info.as_mut() {
             egui_winit::update_viewport_info(
@@ -262,13 +271,11 @@ impl Gui {
             input
         };
 
-        self.egui_state.egui_ctx().run(input, |ctx| {
+        self.output = Some(self.egui_state.egui_ctx().run(input, |ctx| {
             egui::CentralPanel::default()
                 .frame(egui::Frame::new())
-                .show(ctx, |ui| {
-                    self.callback = show(&mut app.data, &mut app.scene, ctx, ui)
-                });
-        })
+                .show(ctx, |ui| self.callback = show(data, scene, ctx, ui));
+        }))
     }
     pub fn run_egui_bevy(
         &mut self,

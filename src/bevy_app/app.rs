@@ -1,8 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
-use std::time::Instant;
 
 use crate::{
-    bevy_app::render::{destroy, render},
+    bevy_app::render::{VulkanApp, create_vulkan_resources, destroy, render},
     game_objects::scene::Scene,
     gui::gui::{Gui, create_gui_from_window},
     vulkan::{
@@ -33,7 +32,7 @@ use bevy::{
     diagnostic::DiagnosticsPlugin,
     ecs::{
         entity::Entity,
-        message::{MessageReader, MessageWriter},
+        message::{Message, MessageReader, MessageWriter},
         query::With,
         resource::Resource,
         system::{Commands, NonSendMut, Query, Res, ResMut},
@@ -46,6 +45,7 @@ use bevy::{
     winit::{RawWinitWindowEvent, WINIT_WINDOWS, WinitPlugin},
 };
 
+use tracing::info;
 use vulkanalia::{Device, vk::DeviceV1_0, window as vk_window};
 use vulkanalia::{
     Entry, Instance,
@@ -90,8 +90,11 @@ impl Plugin for VulkanDefault {
         app.add_plugins(WinitPlugin::default());
         app.add_plugins(WindowPlugin::default());
         app.insert_resource(InputState::default());
-        app.add_systems(Startup, (create_render_app, create_gui_from_window));
-        app.add_systems(Update, (process_raw_winit_events, redraw, destroy_renderer));
+        app.add_systems(Startup, (create_vulkan_resources, create_gui_from_window));
+        app.add_systems(
+            Update,
+            (process_raw_winit_events, redraw /*destroy_renderer*/),
+        );
         //app.add_systems(Update, update_camera_and_gui);
         app.add_systems(
             PostUpdate,
@@ -100,68 +103,6 @@ impl Plugin for VulkanDefault {
             }),
         );
     }
-}
-
-pub fn create_vulkan_resources(
-    mut commands: Commands,
-    primary_window: Query<Entity, With<PrimaryWindow>>,
-) {
-    WINIT_WINDOWS.with_borrow(|windows| {
-        if let Some(window) = windows.get_window(primary_window.single().unwrap()) {
-            let entity = primary_window.single().unwrap();
-            let window = windows.get_window(entity).unwrap();
-            unsafe {
-                let resized = false;
-                let loader = LibloadingLoader::new(LIBRARY).unwrap();
-                let mut scene = Scene::default();
-                let entry = Entry::new(loader)
-                    .inspect_err(|_| eprintln!("failed to create entry"))
-                    .unwrap();
-                let mut data = AppData::default();
-                let instance = create_instance(window, &entry, &mut data).unwrap();
-                data.surface = vk_window::create_surface(
-                    &instance,
-                    &window.display_handle().unwrap(),
-                    &window.window_handle().unwrap(),
-                )
-                .unwrap();
-                pick_physical_device(&instance, &mut data).unwrap();
-                let device = create_logical_device(&entry, &instance, &mut data).unwrap();
-                let start = Instant::now();
-                create_swapchain(window, &instance, &device, &mut data).unwrap();
-                create_swapchain_image_views(&device, &mut data).unwrap();
-                create_render_pass(&instance, &device, &mut data).unwrap();
-                pbr_descriptor_set_layout(&device, &mut data).unwrap();
-                skybox_descriptor_set_layout(&device, &mut data).unwrap();
-                gui_descriptor_set_layout(&device, &mut data).unwrap();
-                gui_pipeline(&device, &mut data, 0).unwrap();
-                create_pbr_pipeline(&device, &mut data, 1).unwrap();
-                skybox_pipeline(&device, &mut data, 2).unwrap();
-                create_color_objects(&instance, &device, &mut data).unwrap();
-                create_depth_objects(&instance, &device, &mut data).unwrap();
-                create_framebuffers(&device, &mut data).unwrap();
-                create_command_pools(&instance, &device, &mut data).unwrap();
-                create_transient_command_pool(&instance, &device, &mut data).unwrap();
-                create_descriptor_pool(&device, &mut data, 30).unwrap();
-
-                create_command_buffers(&device, &mut scene, &mut data, window, None).unwrap();
-                create_sync_objects(&device, &mut data).unwrap();
-
-                create_global_buffers(&instance, &device, &mut data, &mut scene).unwrap();
-
-                commands.insert_resource(VkDevice { inner: device });
-                commands.insert_resource(VkInstance { inner: instance });
-                commands.insert_resource(scene);
-                commands.insert_resource(data);
-                commands.insert_resource(FrameInfo {
-                    resized,
-                    frame: 0,
-                    start,
-                    time_stamp: 0.0,
-                });
-            }
-        }
-    });
 }
 
 pub fn create_render_app(
@@ -187,7 +128,9 @@ pub fn process_raw_winit_events(
     mut input_state: ResMut<InputState>,
     mut gui: NonSendMut<Gui>,
     window_query: Query<Entity, With<PrimaryWindow>>,
-    mut app: ResMut<winit_render_app::App>,
+    mut app: ResMut<VulkanApp>,
+    mut data: ResMut<AppData>,
+    mut scene: ResMut<Scene>,
     mut event_reader: MessageReader<RawWinitWindowEvent>,
     time: Res<Time>,
 ) {
@@ -205,12 +148,13 @@ pub fn process_raw_winit_events(
                     }
                     _ => {}
                 }
-                let response = gui.egui_state.on_window_event(window, &event.event);
-
+                if gui.enabled {
+                    let _response = gui.egui_state.on_window_event(window, &event.event);
+                }
                 input_state.read_event(&event.event);
             }
             gui.set_enabled(&mut input_state);
-            app.scene.update(time.delta_secs(), &input_state);
+            scene.update(time.delta_secs(), &input_state);
             input_state.reset_mouse_delta();
         }
     });
@@ -218,7 +162,9 @@ pub fn process_raw_winit_events(
 
 pub fn destroy_renderer(
     gui: NonSendMut<Gui>,
-    mut app: ResMut<winit_render_app::App>,
+    mut app: ResMut<VulkanApp>,
+    mut scene: ResMut<Scene>,
+    mut data: ResMut<AppData>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
     mut event_reader: MessageReader<WindowCloseRequested>,
 ) {
@@ -232,32 +178,38 @@ pub fn destroy_renderer(
     unsafe {
         app.device.device_wait_idle().unwrap();
     }
+    let app = &mut app;
     unsafe {
-        app.destroy(&mut gui);
+        destroy(app, &mut data, &mut scene, &mut gui);
     }
+}
+
+pub fn received_redraw(mut event_reader: MessageReader<RequestRedraw>) -> bool {
+    event_reader.read().next().is_some()
 }
 pub fn redraw(
     gui: NonSendMut<Gui>,
-    mut app: ResMut<winit_render_app::App>,
+    mut app: ResMut<VulkanApp>,
+    mut scene: ResMut<Scene>,
+    mut data: ResMut<AppData>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
     mut event_reader: MessageReader<RequestRedraw>,
 ) {
     let mut gui = gui;
     let Some(event) = event_reader.read().next() else {
+        info!("no primary window found, probably shutting down");
         return;
     };
-    let entity = primary_window.single().unwrap();
+    let Ok(entity) = primary_window.single() else {
+        return;
+    };
     WINIT_WINDOWS.with_borrow(|windows| {
         let window = windows.get_window(entity).unwrap();
 
-        let output = if gui.enabled {
-            Some(gui.old_run_egui_bevy(&mut app, window))
-        } else {
-            None
-        }; /*if !output.textures_delta.is_empty() {
-        gui.new_texture_delta.push(output.textures_delta.clone())
-        }*/
-        unsafe { crate::bevy_app::render::render(&mut app, window, &mut gui, output) }.unwrap();
+        gui.old_run_egui_bevy(&mut app, &mut data, &mut scene, window);
+        unsafe {
+            crate::bevy_app::render::render(&mut app, &mut data, &mut scene, window, &mut gui)
+        };
     })
 }
 /*pub fn process_window_event(

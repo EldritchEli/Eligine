@@ -156,11 +156,11 @@ pub unsafe fn skybox_pipeline(
 
     //let binding_descriptions = &[SimpleVertex::binding_description()];
     //let attribute_descriptions = SimpleVertex::attribute_descriptions();
-    let binding_descriptions = &[VertexGui::binding_description()];
+    //let binding_descriptions = &[VertexGui::binding_description()];
     let attribute_descriptions = VertexGui::attribute_descriptions();
-    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
-        .vertex_binding_descriptions(binding_descriptions)
-        .vertex_attribute_descriptions(&attribute_descriptions);
+    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder();
+    //  .vertex_binding_descriptions(binding_descriptions)
+    //   .vertex_attribute_descriptions(&attribute_descriptions);
 
     let scissor = vk::Rect2D::builder()
         .offset(vk::Offset2D { x: 0, y: 0 })

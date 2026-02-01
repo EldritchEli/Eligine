@@ -1,12 +1,13 @@
 use std::f32::consts::PI;
 
 use VulcanEngine_0::{
-    bevy_app,
-    game_objects::{skybox::SkyBox, transform::Transform},
-    vulkan::winit_render_app,
+    bevy_app::{self, render::VulkanApp},
+    game_objects::{scene::Scene, skybox::SkyBox, transform::Transform},
+    gltf,
+    vulkan::winit_render_app::AppData,
 };
 use bevy::{
-    app::{App, PostStartup, Startup},
+    app::{App, PostStartup},
     ecs::system::ResMut,
 };
 use glam::{Quat, Vec3};
@@ -21,17 +22,23 @@ pub fn main() {
         .run();
 }
 
-fn add_objects(mut app: ResMut<winit_render_app::App>) {
-    let _paths = [
+fn add_objects(mut app: ResMut<VulkanApp>, mut data: ResMut<AppData>, mut scene: ResMut<Scene>) {
+    const paths: [&str; 2] = [
         //"assets/bird_orange.glb",
         //"assets/living_room/Rubiks Cube.glb",
         "assets/LittleMan.glb",
         "assets/PlatformerCharacter.glb",
     ];
-
-    let guy = app.add_object("assets/PlatformerCharacter.glb").unwrap();
+    let guy = gltf::load::scene(
+        &app.instance,
+        &app.device,
+        &mut data,
+        &mut scene,
+        "assets/PlatformerCharacter.glb",
+    )
+    .unwrap();
     for g in guy {
-        app.scene
+        scene
             .transform_object(
                 g,
                 Transform {
@@ -42,7 +49,7 @@ fn add_objects(mut app: ResMut<winit_render_app::App>) {
             )
             .unwrap();
     }
-    let ashtray = app.add_object("assets/living_room/Chair.glb").unwrap();
+    /*let ashtray = app.add_object("assets/living_room/Chair.glb").unwrap();
     for a in ashtray {
         app.scene
             .transform_object(
@@ -54,13 +61,19 @@ fn add_objects(mut app: ResMut<winit_render_app::App>) {
                 },
             )
             .unwrap();
-    }
-    let man = app.add_object("assets/LittleMan.glb").unwrap();
-    let man = man.iter().next().unwrap();
+    }*/
+    let man = gltf::load::scene(
+        &app.instance,
+        &app.device,
+        &mut data,
+        &mut scene,
+        "assets/LittleMan.glb",
+    )
+    .unwrap();
 
-    app.scene
+    scene
         .transform_object(
-            *man,
+            man[0],
             Transform {
                 position: Vec3::new(-0.0, -2.0, 8.0),
                 scale: 8.0 * Vec3::ONE,
@@ -69,14 +82,12 @@ fn add_objects(mut app: ResMut<winit_render_app::App>) {
         )
         .unwrap();
     //let building = app.add_object("assets/city_building.glb").unwrap();
-    let skybox = Some(app.load_skybox());
-    app.scene.skybox = skybox;
 
-    /*app.scene.skybox = Some(
+    scene.skybox = Some(
         SkyBox::load(
             &app.instance,
             &app.device,
-            &mut app.data,
+            &mut data,
             "assets/skyboxes/nebula/top.png",
             "assets/skyboxes/nebula/bottom.png",
             "assets/skyboxes/nebula/left.png",
@@ -85,5 +96,5 @@ fn add_objects(mut app: ResMut<winit_render_app::App>) {
             "assets/skyboxes/nebula/front.png",
         )
         .unwrap(),
-    )*/
+    );
 }

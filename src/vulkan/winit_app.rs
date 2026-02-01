@@ -193,7 +193,7 @@ impl ApplicationHandler for WinitWrapper {
                 /*if !output.textures_delta.is_empty() {
                     gui.new_texture_delta.push(output.textures_delta.clone())
                 }*/
-                unsafe { app.render(window, self.gui.as_mut().unwrap(), output) }.unwrap();
+                unsafe { app.render(window, self.gui.as_mut().unwrap()) }.unwrap();
                 window.request_redraw();
             }
             _ =>

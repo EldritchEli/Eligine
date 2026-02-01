@@ -324,12 +324,7 @@ impl App {
     }
 
     /// Renders a frame for our Vulkan app.
-    pub unsafe fn render(
-        &mut self,
-        window: &Window,
-        gui: &mut Gui,
-        egui_output: Option<FullOutput>,
-    ) -> anyhow::Result<()> {
+    pub unsafe fn render(&mut self, window: &Window, gui: &mut Gui) -> anyhow::Result<()> {
         self.device
             .wait_for_fences(&[self.data.in_flight_fences[self.frame]], true, u64::MAX)?;
 
@@ -365,7 +360,7 @@ impl App {
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
         if gui.egui_state.egui_ctx().has_requested_repaint()
-            && let Some(egui_output) = egui_output
+            && let Some(egui_output) = gui.output.take()
         {
             gui.update_gui_images(
                 &self.instance,

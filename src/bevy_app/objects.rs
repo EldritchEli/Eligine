@@ -24,6 +24,8 @@ where
     vertices: Vec<V>,
     uniform_buffer: vk::Buffer,
     uniform_memory: vk::DeviceMemory,
+    uniform_mem_map : usize,
+    instance_count : usize,
 }
 
 #[derive(Component)]
@@ -33,3 +35,7 @@ pub struct UniformInstance {
     mem_map: usize,
     buffer_offset: u32,
 }
+
+
+
+

@@ -2,7 +2,7 @@
 use crate::vulkan::shader_module_util::create_shader_module;
 use crate::vulkan::uniform_buffer_object::PbrPushConstant;
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexGui, VertexPbr};
-use crate::vulkan::winit_render_app::AppData;
+use crate::winit_app::winit_render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
 use vulkanalia::{Device, vk};
 

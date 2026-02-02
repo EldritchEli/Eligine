@@ -20,8 +20,6 @@ pub mod swapchain_util;
 pub mod sync_util;
 pub mod uniform_buffer_object;
 pub mod vertexbuffer_util;
-pub mod winit_app;
-pub mod winit_render_app;
 pub const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
 pub const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 pub const VALIDATION_LAYER: vk::ExtensionName =

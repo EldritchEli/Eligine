@@ -9,7 +9,8 @@ use vulkanalia::{
     vk::{self, DeviceMemory, DeviceV1_0},
 };
 
-use crate::vulkan::{descriptor_util::create_uniform_buffers, winit_render_app::AppData};
+use crate::vulkan::descriptor_util::create_uniform_buffers;
+use crate::winit_app::winit_render_app::AppData;
 
 #[repr(C)]
 #[derive(Debug, Clone, Default)]

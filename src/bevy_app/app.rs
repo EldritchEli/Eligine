@@ -20,8 +20,8 @@ use crate::{
         render_pass_util::create_render_pass,
         swapchain_util::{create_swapchain, create_swapchain_image_views},
         sync_util::create_sync_objects,
-        winit_render_app::{self, AppData, FrameInfo},
     },
+    winit_app::winit_render_app::{self, AppData},
 };
 use bevy::{
     app::{

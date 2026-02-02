@@ -5,7 +5,7 @@ use crate::game_objects::scene::{Scene, Sun};
 use crate::vulkan::buffer_util::create_buffer;
 use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, UniformBuffer};
 use crate::vulkan::vertexbuffer_util::Vertex;
-use crate::vulkan::winit_render_app::AppData;
+use crate::winit_app::winit_render_app::AppData;
 use anyhow::Result;
 use vulkanalia::vk::{DeviceMemory, DeviceV1_0, HasBuilder};
 use vulkanalia::{Device, Instance, vk};

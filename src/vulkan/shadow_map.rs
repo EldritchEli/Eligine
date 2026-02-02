@@ -4,11 +4,13 @@ use vulkanalia::{
     vk::{self, DeviceV1_0, Handle, HasBuilder, ImageView},
 };
 
-use crate::vulkan::{
-    framebuffer_util::get_depth_format,
-    image_util::{TextureData, create_image, create_image_view},
-    shader_module_util::create_shader_module,
-    winit_render_app::AppData,
+use crate::{
+    vulkan::{
+        framebuffer_util::get_depth_format,
+        image_util::{TextureData, create_image, create_image_view},
+        shader_module_util::create_shader_module,
+    },
+    winit_app::winit_render_app::AppData,
 };
 
 #[derive(Clone, Debug)]

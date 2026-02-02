@@ -21,9 +21,10 @@ use vulkanalia::{
 };
 use winit::window;
 
+use crate::winit_app::winit_render_app::AppData;
 use crate::{
-    bevy_app::render::{self, VulkanApp},
-    game_objects::{render_object, scene::Scene},
+    bevy_app::render::VulkanApp,
+    game_objects::scene::Scene,
     gui::{
         gui, menu,
         objects::{self, selected_object},
@@ -33,7 +34,6 @@ use crate::{
         input_state::InputState,
         uniform_buffer_object::GlobalUniform,
         vertexbuffer_util::{VertexData, VertexGui},
-        winit_render_app::{App, AppData},
     },
 };
 
@@ -238,15 +238,10 @@ impl Gui {
         })
     }
 
-    pub fn run_egui(
-        &mut self,
-        data: &mut AppData,
-        scene: &mut Scene,
-        window: &window::Window,
-    ) -> FullOutput {
+    pub fn run_egui(&mut self, data: &mut AppData, scene: &mut Scene, window: &window::Window) {
         let viewport_info = self.viewport_info.as_mut().unwrap();
         egui_winit::update_viewport_info(viewport_info, self.egui_state.egui_ctx(), window, false);
-        self.run_egui_fst(data, scene, window)
+        self.output = Some(self.run_egui_fst(data, scene, window));
     }
 
     pub fn old_run_egui_bevy(

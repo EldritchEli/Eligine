@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 
 use VulcanEngine_0::{
     game_objects::{skybox::SkyBox, transform::Transform},
-    vulkan::winit_app::WinitWrapper,
+    winit_app::winit_app::WinitWrapper,
 };
 use glam::{Quat, Vec3};
 

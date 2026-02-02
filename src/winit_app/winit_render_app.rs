@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
+use crate::asset_manager;
 use crate::game_objects::skybox::SkyBox;
-use crate::gltf;
 use crate::gui::gui::{Gui, create_gui_descriptor_sets};
 use crate::vulkan::command_buffer_util::{create_command_buffer, create_command_buffers};
 use crate::vulkan::command_pool::{
@@ -25,7 +25,6 @@ use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
 use bevy::ecs::resource::Resource;
-use egui::FullOutput;
 use log::info;
 use std::path::Path;
 use std::time::Instant;
@@ -184,7 +183,7 @@ impl App {
     }
 
     pub fn add_object(&mut self, path: impl AsRef<Path>) -> Result<Vec<ObjectId>, ()> {
-        let object_id = match gltf::load::scene(
+        let object_id = match asset_manager::load::scene(
             &self.instance,
             &self.device,
             &mut self.data,

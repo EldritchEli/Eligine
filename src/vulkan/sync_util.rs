@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
-use crate::vulkan::winit_render_app::AppData;
+use crate::winit_app::winit_render_app::AppData;
 use vulkanalia::vk::{DeviceV1_0, Handle, HasBuilder};
 use vulkanalia::{Device, vk};
 

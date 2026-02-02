@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::framebuffer_util::get_depth_format;
-use crate::vulkan::winit_render_app::AppData;
+use crate::winit_app::winit_render_app::AppData;
 use vulkanalia::vk::{
     AttachmentReferenceBuilder, DeviceV1_0, HasBuilder, SubpassDescriptionBuilder,
 };

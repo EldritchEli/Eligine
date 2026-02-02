@@ -7,8 +7,7 @@
 )]
 use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
-use crate::vulkan::queue_family_indices::QueueFamilyIndices;
-use crate::vulkan::winit_render_app::App;
+use crate::winit_app::winit_render_app::App;
 use anyhow::anyhow;
 
 use log::error;
@@ -154,6 +153,7 @@ impl ApplicationHandler for WinitWrapper {
         self.input_state.read_event(&event);
         gui.set_enabled(&mut self.input_state);
         app.scene.update(dt, &self.input_state);
+        self.input_state.reset_mouse_delta();
         match event {
             WindowEvent::Resized(size) => {
                 if size.width == 0 || size.height == 0 {
@@ -185,10 +185,9 @@ impl ApplicationHandler for WinitWrapper {
             }
             WindowEvent::RedrawRequested => {
                 let window = &self.window.as_ref().unwrap();
-                let output = if gui.enabled {
-                    Some(gui.run_egui(&mut app.data, &mut app.scene, window))
+                if gui.enabled {
+                    gui.run_egui(&mut app.data, &mut app.scene, window);
                 } else {
-                    None
                 };
                 /*if !output.textures_delta.is_empty() {
                     gui.new_texture_delta.push(output.textures_delta.clone())

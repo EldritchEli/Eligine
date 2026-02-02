@@ -1,3 +1,4 @@
+use crate::winit_app::winit_render_app::AppData;
 use crate::{
     game_objects::{
         render_object::{ObjectId, PBR, RenderId, RenderObject},
@@ -6,8 +7,7 @@ use crate::{
     },
     vulkan::{
         image_util::TextureData,
-        vertexbuffer_util::{Vertex, VertexData, VertexPbr},
-        winit_render_app::AppData,
+        vertexbuffer_util::{VertexData, VertexPbr},
     },
 };
 

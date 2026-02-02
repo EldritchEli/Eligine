@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use crate::vulkan::winit_render_app::AppData;
 use crate::vulkan::{PORTABILITY_MACOS_VERSION, VALIDATION_ENABLED, VALIDATION_LAYER};
+use crate::winit_app::winit_render_app::AppData;
 use anyhow::anyhow;
 use log::{debug, error, info, trace, warn};
 use std::collections::HashSet;

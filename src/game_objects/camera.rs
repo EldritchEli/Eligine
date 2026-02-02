@@ -13,8 +13,8 @@ use winit::event::MouseScrollDelta;
 use crate::game_objects::transform::{self, Transform};
 use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
-use crate::vulkan::winit_render_app::{self, AppData};
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE};
+use crate::winit_app::winit_render_app::{self, AppData};
 use std::cmp::PartialEq;
 use std::f32::consts::PI;
 

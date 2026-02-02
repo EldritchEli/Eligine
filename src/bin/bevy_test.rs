@@ -1,9 +1,9 @@
 use std::f32::consts::PI;
 
 use VulcanEngine_0::{
+    asset_manager,
     bevy_app::{self, render::VulkanApp},
     game_objects::{scene::Scene, skybox::SkyBox, transform::Transform},
-    gltf,
     vulkan::winit_render_app::AppData,
 };
 use bevy::{
@@ -29,7 +29,7 @@ fn add_objects(mut app: ResMut<VulkanApp>, mut data: ResMut<AppData>, mut scene:
         "assets/LittleMan.glb",
         "assets/PlatformerCharacter.glb",
     ];
-    let guy = gltf::load::scene(
+    let guy = asset_manager::load::scene(
         &app.instance,
         &app.device,
         &mut data,
@@ -62,7 +62,7 @@ fn add_objects(mut app: ResMut<VulkanApp>, mut data: ResMut<AppData>, mut scene:
             )
             .unwrap();
     }*/
-    let man = gltf::load::scene(
+    let man = asset_manager::load::scene(
         &app.instance,
         &app.device,
         &mut data,

@@ -1,4 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
+use crate::winit_app::winit_render_app::{self, AppData, FrameInfo};
 use crate::{
     game_objects::scene::Scene,
     gui::gui::{Gui, create_gui_descriptor_sets},
@@ -23,7 +24,6 @@ use crate::{
             GlobalUniform, OrthographicLight, PbrPushConstant, PbrUniform, UniformBuffer,
         },
         vertexbuffer_util::VertexPbr,
-        winit_render_app::{self, AppData, FrameInfo},
     },
 };
 use anyhow::anyhow;

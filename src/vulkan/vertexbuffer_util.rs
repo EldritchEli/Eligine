@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::mem::size_of;
 
 use crate::vulkan::buffer_util::{copy_buffer, create_buffer};
-use crate::vulkan::winit_render_app::AppData;
+use crate::winit_app::winit_render_app::AppData;
 use glam::{U8Vec4, Vec2, Vec3, vec3};
 use std::ptr::copy_nonoverlapping as memcpy;
 use varlen_macro::define_varlen;

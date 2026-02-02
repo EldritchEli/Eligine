@@ -1,6 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use crate::vulkan::image_util::create_image_view;
-use crate::vulkan::{queue_family_indices::QueueFamilyIndices, winit_render_app::AppData};
+use crate::vulkan::queue_family_indices::QueueFamilyIndices;
+use crate::winit_app::winit_render_app::AppData;
 use vulkanalia::vk::{Handle, HasBuilder, KhrSurfaceExtension, KhrSwapchainExtension};
 use vulkanalia::{Device, Instance, vk};
 use winit::window::Window;

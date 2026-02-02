@@ -5,9 +5,8 @@ use vulkanalia::{
     vk::{self, DescriptorSet, DeviceV1_0, HasBuilder},
 };
 
-use crate::vulkan::{
-    image_util::TextureData, uniform_buffer_object::GlobalUniform, winit_render_app::AppData,
-};
+use crate::vulkan::{image_util::TextureData, uniform_buffer_object::GlobalUniform};
+use crate::winit_app::winit_render_app::AppData;
 
 impl SkyBox {
     pub fn get_descriptor_sets(&self) -> &Vec<vulkanalia::vk::DescriptorSet> {

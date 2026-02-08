@@ -1,26 +1,10 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 
 use crate::{
-    bevy_app::render::{VulkanApp, create_vulkan_resources, destroy, render},
+    bevy_app::render::{self, VulkanApp, create_vulkan_resources, destroy},
     game_objects::scene::Scene,
     gui::gui::{Gui, create_gui_from_window},
-    vulkan::{
-        color_objects::create_color_objects,
-        command_buffer_util::create_command_buffers,
-        command_pool::{create_command_pools, create_transient_command_pool},
-        descriptor_util::{
-            create_descriptor_pool, create_global_buffers, gui_descriptor_set_layout,
-            pbr_descriptor_set_layout, skybox_descriptor_set_layout,
-        },
-        device_util::{create_logical_device, pick_physical_device},
-        framebuffer_util::{create_depth_objects, create_framebuffers},
-        input_state::InputState,
-        instance_util::create_instance,
-        pipeline_util::{create_pbr_pipeline, gui_pipeline, skybox_pipeline},
-        render_pass_util::create_render_pass,
-        swapchain_util::{create_swapchain, create_swapchain_image_views},
-        sync_util::create_sync_objects,
-    },
+    vulkan::input_state::InputState,
     winit_app::winit_render_app::{self, AppData},
 };
 use bevy::{
@@ -32,26 +16,22 @@ use bevy::{
     diagnostic::DiagnosticsPlugin,
     ecs::{
         entity::Entity,
-        message::{Message, MessageReader, MessageWriter},
+        message::{MessageReader, MessageWriter},
         query::With,
         resource::Resource,
+        schedule::IntoScheduleConfigs,
         system::{Commands, NonSendMut, Query, Res, ResMut},
     },
     image::ImagePlugin,
     input::InputPlugin,
     time::{Time, TimePlugin},
     transform::TransformPlugin,
-    window::{PrimaryWindow, RequestRedraw, WindowCloseRequested, WindowDestroyed, WindowPlugin},
+    window::{PrimaryWindow, RequestRedraw, WindowCloseRequested, WindowPlugin},
     winit::{RawWinitWindowEvent, WINIT_WINDOWS, WinitPlugin},
 };
 
-use tracing::info;
-use vulkanalia::{Device, vk::DeviceV1_0, window as vk_window};
-use vulkanalia::{
-    Entry, Instance,
-    loader::{LIBRARY, LibloadingLoader},
-};
-use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use vulkanalia::Instance;
+use vulkanalia::{Device, vk::DeviceV1_0};
 #[derive(Resource, Clone, Debug)]
 
 pub struct VkDevice {
@@ -93,15 +73,20 @@ impl Plugin for VulkanDefault {
         app.add_systems(Startup, (create_vulkan_resources, create_gui_from_window));
         app.add_systems(
             Update,
-            (process_raw_winit_events, redraw /*destroy_renderer*/),
+            (
+                process_raw_winit_events,
+                update_gui,
+                render::handle_acquired_image,
+                render::update_uniforms,
+                render::submit_command_buffer_and_present_image,
+            )
+                .chain()
+                .run_if(received_redraw),
         );
         //app.add_systems(Update, update_camera_and_gui);
-        app.add_systems(
-            PostUpdate,
-            (redraw, |mut writer: MessageWriter<RequestRedraw>| {
-                writer.write(RequestRedraw);
-            }),
-        );
+        app.add_systems(PostUpdate, |mut writer: MessageWriter<RequestRedraw>| {
+            writer.write(RequestRedraw);
+        });
     }
 }
 
@@ -129,7 +114,6 @@ pub fn process_raw_winit_events(
     mut gui: NonSendMut<Gui>,
     window_query: Query<Entity, With<PrimaryWindow>>,
     mut app: ResMut<VulkanApp>,
-    mut data: ResMut<AppData>,
     mut scene: ResMut<Scene>,
     mut event_reader: MessageReader<RawWinitWindowEvent>,
     time: Res<Time>,
@@ -139,14 +123,11 @@ pub fn process_raw_winit_events(
     WINIT_WINDOWS.with_borrow(|windows| {
         if let Some(window) = windows.get_window(w_id) {
             for event in event_reader.read() {
-                match event.event {
-                    winit::event::WindowEvent::Resized(size) => {
-                        if size.width == 0 || size.height == 0 {
-                        } else {
-                            app.resized = true;
-                        };
-                    }
-                    _ => {}
+                if let winit::event::WindowEvent::Resized(size) = event.event {
+                    if size.width == 0 || size.height == 0 {
+                    } else {
+                        app.resized = true;
+                    };
                 }
                 if gui.enabled {
                     let _response = gui.egui_state.on_window_event(window, &event.event);
@@ -165,11 +146,10 @@ pub fn destroy_renderer(
     mut app: ResMut<VulkanApp>,
     mut scene: ResMut<Scene>,
     mut data: ResMut<AppData>,
-    primary_window: Query<Entity, With<PrimaryWindow>>,
     mut event_reader: MessageReader<WindowCloseRequested>,
 ) {
     let mut gui = gui;
-    let Some(event) = event_reader.read().next() else {
+    let Some(_event) = event_reader.read().next() else {
         return;
     };
     // Destroy our Vulkan app.
@@ -187,108 +167,23 @@ pub fn destroy_renderer(
 pub fn received_redraw(mut event_reader: MessageReader<RequestRedraw>) -> bool {
     event_reader.read().next().is_some()
 }
-pub fn redraw(
-    gui: NonSendMut<Gui>,
+pub fn update_gui(
+    mut gui: NonSendMut<Gui>,
     mut app: ResMut<VulkanApp>,
     mut scene: ResMut<Scene>,
     mut data: ResMut<AppData>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
-    mut event_reader: MessageReader<RequestRedraw>,
 ) {
     let mut gui = gui;
-    let Some(event) = event_reader.read().next() else {
-        info!("no primary window found, probably shutting down");
-        return;
-    };
     let Ok(entity) = primary_window.single() else {
         return;
     };
     WINIT_WINDOWS.with_borrow(|windows| {
         let window = windows.get_window(entity).unwrap();
-
         gui.old_run_egui_bevy(&mut app, &mut data, &mut scene, window);
-        unsafe {
-            crate::bevy_app::render::render(&mut app, &mut data, &mut scene, window, &mut gui)
-        };
     })
 }
-/*pub fn process_window_event(
-    gui: NonSendMut<Gui>,
-    mut data: ResMut<AppData>,
-    instance: Res<VkInstance>,
-    mut device: Res<VkDevice>,
-    mut frame_info: ResMut<FrameInfo>,
-    mut scene: ResMut<Scene>,
-    primary_window: Query<Entity, With<PrimaryWindow>>,
-    mut event_reader: MessageReader<RawWinitWindowEvent>,
-) {
-    let mut gui = gui;
-    let Some(event) = event_reader.read().next() else {
-        return;
-    };
-    dbg!(&instance);
-    println!("got event");
-    match event.event {
-        winit::event::WindowEvent::Destroyed => {
-            println!("window destroyed");
-            unsafe {
-                device.inner.device_wait_idle().unwrap();
-            }
-            unsafe {
-                destroy(
-                    &instance.inner,
-                    &device.inner,
-                    &mut data,
-                    &mut scene,
-                    &mut gui,
-                );
-            }
-        }
-        // Destroy our Vulkan app.
-        winit::event::WindowEvent::CloseRequested => {
-            println!("window closed");
-
-            unsafe {
-                destroy(
-                    &instance.inner,
-                    &device.inner,
-                    &mut data,
-                    &mut scene,
-                    &mut gui,
-                );
-            }
-        }
-        winit::event::WindowEvent::RedrawRequested => {
-            let entity = primary_window.single().unwrap();
-            WINIT_WINDOWS.with_borrow(|windows| {
-                let window = windows.get_window(entity).unwrap();
-
-                let output = if gui.enabled {
-                    Some(gui.run_egui(&mut data, &mut scene, window))
-                } else {
-                    None
-                };
-                /*if !output.textures_delta.is_empty() {
-                    gui.new_texture_delta.push(output.textures_delta.clone())
-                }*/
-                render(
-                    &instance.inner,
-                    &device.inner,
-                    &mut data,
-                    &mut scene,
-                    &mut frame_info,
-                    window,
-                    &mut gui,
-                    output,
-                );
-            })
-        }
-        _ =>
-            /*WindowEvent::RedrawRequested if !event_loop.exiting() && !self.window_minimized => */
-            {}
-    }
-}
-
+/*
     PanicHandlerPlugin
     LogPlugin - with feature bevy_log
     TaskPoolPlugin

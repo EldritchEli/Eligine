@@ -250,15 +250,9 @@ impl App {
                 object,
             )?;
         }
-        for objects in &mut gui.render_objects {
-            for object in objects {
-                object.descriptor_set = create_gui_descriptor_sets(
-                    &gui.image_map,
-                    &self.device,
-                    &self.data,
-                    &object.id,
-                )?;
-            }
+        for object in &mut gui.render_objects {
+            object.descriptor_set =
+                create_gui_descriptor_sets(&gui.image_map, &self.device, &self.data, &object.id)?;
         }
 
         create_command_buffers(
@@ -476,26 +470,24 @@ impl App {
             .image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        for objects in &gui.render_objects {
-            for object in objects {
+        for object in &gui.render_objects {
+            self.device
+                .free_memory(object.vertex_data.vertex_buffer_memory, None);
+            self.device
+                .destroy_buffer(object.vertex_data.vertex_buffer, None);
+            self.device
+                .free_memory(object.vertex_data.index_buffer_memory, None);
+            self.device
+                .destroy_buffer(object.vertex_data.index_buffer, None);
+            if let Some(staging_map) = &object.vertex_data.mem_map {
                 self.device
-                    .free_memory(object.vertex_data.vertex_buffer_memory, None);
+                    .free_memory(staging_map.index.staging_memory, None);
                 self.device
-                    .destroy_buffer(object.vertex_data.vertex_buffer, None);
+                    .destroy_buffer(staging_map.index.staging_buffer, None);
                 self.device
-                    .free_memory(object.vertex_data.index_buffer_memory, None);
+                    .free_memory(staging_map.vertex.staging_memory, None);
                 self.device
-                    .destroy_buffer(object.vertex_data.index_buffer, None);
-                if let Some(staging_map) = &object.vertex_data.mem_map {
-                    self.device
-                        .free_memory(staging_map.index.staging_memory, None);
-                    self.device
-                        .destroy_buffer(staging_map.index.staging_buffer, None);
-                    self.device
-                        .free_memory(staging_map.vertex.staging_memory, None);
-                    self.device
-                        .destroy_buffer(staging_map.vertex.staging_buffer, None);
-                }
+                    .destroy_buffer(staging_map.vertex.staging_buffer, None);
             }
         }
         for (_i, object) in self.scene.render_objects.iter() {

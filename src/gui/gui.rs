@@ -123,7 +123,7 @@ pub unsafe fn create_gui_descriptor_sets(
 }
 pub struct Gui {
     pub enabled: bool,
-    pub render_objects: Vec<Vec<GuiRenderObject>>,
+    pub render_objects: Vec<GuiRenderObject>,
     pub image_map: HashMap<TextureId, TextureData>,
     // let images go through all framebuffers before removing, to all images to be removed are not being used
     pub images_to_destroy: Vec<(u8, TextureData)>,
@@ -307,7 +307,7 @@ impl Gui {
             data.destroy_image(device);
         }
         for v in &self.render_objects {
-            for v in v {
+            {
                 device.free_memory(v.vertex_data.vertex_buffer_memory, None);
                 device.destroy_buffer(v.vertex_data.vertex_buffer, None);
                 device.free_memory(v.vertex_data.index_buffer_memory, None);
@@ -412,7 +412,6 @@ impl Gui {
         if self.render_objects.is_empty() {
             return self.init_gui_mesh(instance, device, data, output, pixels_per_point);
         }
-        let render_objects = &mut self.render_objects[image_index];
         let texture_id: Vec<(TextureId, Rect)> = output
             .clone()
             .shapes
@@ -423,8 +422,8 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        if primitives.len() < render_objects.len() {
-            for obj in render_objects.drain(primitives.len()..) {
+        if primitives.len() < self.render_objects.len() {
+            for obj in self.render_objects.drain(primitives.len()..) {
                 device.destroy_buffer(obj.vertex_data.vertex_buffer, None);
                 device.destroy_buffer(obj.vertex_data.index_buffer, None);
                 device.free_memory(obj.vertex_data.vertex_buffer_memory, None);
@@ -438,19 +437,19 @@ impl Gui {
                 device.free_memory(map.vertex.staging_memory, None);
             }
         }
-        for i in 0..render_objects.len() {
+        for i in 0..self.render_objects.len() {
             let (id, _) = texture_id[i];
             let rect = primitives[i].clip_rect;
             match prim_to_mesh(&primitives[i]) {
                 Either::Left(rect) => self.callback = rect,
                 Either::Right((indices, verts)) => {
-                    render_objects[i]
+                    self.render_objects[i]
                         .vertex_data
                         .update_vertex_data(instance, device, data, verts, indices)?;
-                    render_objects[i].id = id;
-                    render_objects[i].rect = rect;
+                    self.render_objects[i].id = id;
+                    self.render_objects[i].rect = rect;
                     update_gui_descriptor_sets(
-                        &render_objects[i].descriptor_set,
+                        &self.render_objects[i].descriptor_set,
                         &self.image_map,
                         device,
                         &id,
@@ -459,7 +458,7 @@ impl Gui {
             }
         }
 
-        for i in render_objects.len()..primitives.len() {
+        for i in self.render_objects.len()..primitives.len() {
             let (id, _) = texture_id[i];
             let rect = primitives[i].clip_rect;
             match prim_to_mesh(&primitives[i]) {
@@ -475,7 +474,7 @@ impl Gui {
                             true,
                         )
                     }?;
-                    self.render_objects[image_index].push(GuiRenderObject {
+                    self.render_objects.push(GuiRenderObject {
                         vertex_data,
                         descriptor_set: unsafe {
                             create_gui_descriptor_sets(&self.image_map, device, data, &id)
@@ -507,38 +506,35 @@ impl Gui {
             .egui_state
             .egui_ctx()
             .tessellate(output.shapes.clone(), pixels_per_point);
-        for _ in 0..data.framebuffers.len() {
-            let mut gui_render_objects = Vec::with_capacity(primitives.len());
-            for i in 0..primitives.len() {
-                let prim = &primitives[i];
-                let rect = prim.clip_rect;
-                let (id, _) = texture_id[i];
+        self.render_objects = Vec::with_capacity(primitives.len());
+        for i in 0..primitives.len() {
+            let prim = &primitives[i];
+            let rect = prim.clip_rect;
+            let (id, _) = texture_id[i];
 
-                match prim_to_mesh(prim) {
-                    Either::Left(rect) => self.callback = rect,
-                    Either::Right((indices, verts)) => {
-                        let vertex_data = unsafe {
-                            VertexData::create_vertex_data(
-                                instance,
-                                device,
-                                data,
-                                verts.to_owned(),
-                                indices.clone(),
-                                true,
-                            )
-                        }?;
-                        gui_render_objects.push(GuiRenderObject {
-                            vertex_data,
-                            descriptor_set: unsafe {
-                                create_gui_descriptor_sets(&self.image_map, device, data, &id)
-                            }?,
-                            id,
-                            rect,
-                        });
-                    }
+            match prim_to_mesh(prim) {
+                Either::Left(rect) => self.callback = rect,
+                Either::Right((indices, verts)) => {
+                    let vertex_data = unsafe {
+                        VertexData::create_vertex_data(
+                            instance,
+                            device,
+                            data,
+                            verts.to_owned(),
+                            indices.clone(),
+                            true,
+                        )
+                    }?;
+                    self.render_objects.push(GuiRenderObject {
+                        vertex_data,
+                        descriptor_set: unsafe {
+                            create_gui_descriptor_sets(&self.image_map, device, data, &id)
+                        }?,
+                        id,
+                        rect,
+                    });
                 }
             }
-            self.render_objects.push(gui_render_objects)
         }
         Ok(())
     }

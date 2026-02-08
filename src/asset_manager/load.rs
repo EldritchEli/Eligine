@@ -1,3 +1,4 @@
+use crate::asset_manager::DEFAULT_TEXTURE;
 use crate::winit_app::winit_render_app::AppData;
 use crate::{
     game_objects::{
@@ -23,9 +24,6 @@ use std::{collections::HashMap, path::Path};
 use terrors::OneOf;
 use vulkanalia::{Device, Instance};
 
-const DEFAULT_TEXTURE: [u8; 16] = [
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-];
 ///loads a single gltf scene.
 pub fn scene(
     instance: &Instance,
@@ -204,7 +202,7 @@ fn load_node(
     Ok(maybe_object_id)
 }
 
-fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> &'a [u8] {
+pub fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> &'a [u8] {
     let view = accessor.view().unwrap();
     let index = view.buffer().index();
     info!(
@@ -234,7 +232,7 @@ fn get_buffer_slice<'a>(accessor: &Accessor, buffers: &'a Vec<buffer::Data>) -> 
         ..accessor.offset() + view.offset() + accessor.count() * type_size * dimension]
 }
 
-fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
+pub fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
     let positions = *map.get(&Semantic::Positions).unwrap();
     assert_eq!(positions.len() % 12, 0, "positions must be divisible by 12");
     let positions: &[Vec3] = unsafe { std::mem::transmute(positions) };
@@ -277,7 +275,7 @@ fn intersperse_vertex_data(map: &HashMap<Semantic, &[u8]>) -> Vec<VertexPbr> {
     vertices
 }
 /// turns images with type r8g8b8 to r8g8b8a8.
-fn interleave_alpha_channel(rgbs: &Vec<u8>, alpha_val: u8) -> Vec<u8> {
+pub fn interleave_alpha_channel(rgbs: &Vec<u8>, alpha_val: u8) -> Vec<u8> {
     let a = alpha_val;
     let mut rgbas: Vec<u8> = Vec::with_capacity(rgbs.len() * (1 / 3) as usize);
     let mut count = 0;

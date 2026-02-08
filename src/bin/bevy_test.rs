@@ -4,7 +4,7 @@ use VulcanEngine_0::{
     asset_manager,
     bevy_app::{self, render::VulkanApp},
     game_objects::{scene::Scene, skybox::SkyBox, transform::Transform},
-    vulkan::winit_render_app::AppData,
+    winit_app::winit_render_app::AppData,
 };
 use bevy::{
     app::{App, PostStartup},

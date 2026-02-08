@@ -2,7 +2,7 @@ use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
 use bevy::ecs::resource::Resource;
 use glam::{Vec2, vec2};
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 #[derive(Default, PartialEq, Debug, Clone, Copy)]
@@ -103,20 +103,6 @@ impl InputState {
     pub fn reset_mouse_delta(&mut self) {
         self.mouse_delta = Vec2::ZERO
     }
-    fn set_mouse_position(&mut self, event: &WindowEvent) {
-        if let WindowEvent::CursorMoved { position, .. } = event {}
-    }
-
-    fn set_mouse_scroll_delta(&mut self, event: &WindowEvent) {
-        if let WindowEvent::MouseWheel { delta, .. } = event {
-            self.mouse_delta = match delta {
-                MouseScrollDelta::LineDelta(x, y) => vec2(*x, *y),
-                MouseScrollDelta::PixelDelta(physical_position) => {
-                    vec2(physical_position.x as f32, physical_position.y as f32)
-                }
-            };
-        }
-    }
 
     pub fn read_event(&mut self, event: &WindowEvent) {
         //self.set_mouse_position(event);
@@ -151,8 +137,6 @@ impl InputState {
             } => {
                 if !repeat {
                     self.set_key_state(state, key);
-                } else {
-                    println!("repeat key: {:?}", key)
                 }
             }
             _ => (),

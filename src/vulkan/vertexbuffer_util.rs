@@ -423,7 +423,7 @@ pub fn test_mesh1() -> MeshData{ MeshData {
     })
 }
 }*/
-pub trait Vertex: Sized {
+pub trait Vertex: Sized + Send + std::marker::Sync {
     fn binding_description() -> vk::VertexInputBindingDescription {
         vk::VertexInputBindingDescription::builder()
             .binding(0)

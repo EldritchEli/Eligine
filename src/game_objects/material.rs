@@ -10,4 +10,4 @@ pub trait Material {
     fn draw(&self, device: &mut vulkanalia::Device, commands: &CommandBuffer)
     -> anyhow::Result<()>;
 }
-pub trait MaterialInstance {}
+pub trait MaterialInstance: Sync + std::marker::Sync + Send + std::marker::Send {}

@@ -1,5 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
-use crate::winit_app::winit_render_app::{self, AppData, FrameInfo};
+use crate::winit_app::winit_render_app::AppData;
 use crate::{
     game_objects::scene::Scene,
     gui::gui::{Gui, create_gui_descriptor_sets},
@@ -26,7 +26,7 @@ use crate::{
         vertexbuffer_util::VertexPbr,
     },
 };
-use anyhow::anyhow;
+use bevy::ecs::system::{NonSendMut, Res, ResMut};
 use bevy::{
     ecs::{
         entity::Entity,
@@ -39,7 +39,6 @@ use bevy::{
 };
 use std::intrinsics::copy_nonoverlapping as memcpy;
 
-use egui::FullOutput;
 use glam::Mat4;
 use tracing::{error, info};
 use vulkanalia::{
@@ -66,6 +65,7 @@ pub struct VulkanApp {
     pub frame: usize,
     pub resized: bool,
     pub time_stamp: f32,
+    pub image_index: usize,
 }
 pub fn create_vulkan_resources(
     mut commands: Commands,
@@ -73,8 +73,6 @@ pub fn create_vulkan_resources(
 ) {
     WINIT_WINDOWS.with_borrow(|windows| {
         if let Some(window) = windows.get_window(primary_window.single().unwrap()) {
-            let entity = primary_window.single().unwrap();
-            let window = windows.get_window(entity).unwrap();
             unsafe {
                 let resized = false;
                 let loader = LibloadingLoader::new(LIBRARY).unwrap();
@@ -123,6 +121,7 @@ pub fn create_vulkan_resources(
                     instance,
 
                     device,
+                    image_index: 0,
                 });
             }
         }
@@ -137,7 +136,6 @@ pub fn recreate_swapchain(
     gui: &mut Gui,
 ) {
     unsafe {
-        println!("here");
         device.device_wait_idle().unwrap();
         println!("device");
         destroy_swapchain(data, device, scene);
@@ -146,30 +144,30 @@ pub fn recreate_swapchain(
             panic!("swapchain creation error: {:?}", e);
         }
         println!("after create swap");
-        create_swapchain_image_views(&device, data).unwrap();
-        create_render_pass(&instance, &device, data).unwrap();
+        create_swapchain_image_views(device, data).unwrap();
+        create_render_pass(instance, device, data).unwrap();
 
-        create_descriptor_pool(&device, data, 30).unwrap();
-        skybox_pipeline(&device, data, 2).unwrap();
-        create_pbr_pipeline(&device, data, 1).unwrap();
-        gui_pipeline(&device, data, 0).unwrap();
+        create_descriptor_pool(device, data, 30).unwrap();
+        skybox_pipeline(device, data, 2).unwrap();
+        create_pbr_pipeline(device, data, 1).unwrap();
+        gui_pipeline(device, data, 0).unwrap();
         println!("beree");
-        create_color_objects(&instance, &device, data).unwrap();
-        create_depth_objects(&instance, &device, data).unwrap();
-        create_framebuffers(&device, data).unwrap();
-        create_global_buffers(&instance, &device, data, scene).unwrap();
-        create_skybox_descriptor_sets(&device, &data, scene).unwrap();
+        create_color_objects(instance, device, data).unwrap();
+        create_depth_objects(instance, device, data).unwrap();
+        create_framebuffers(device, data).unwrap();
+        create_global_buffers(instance, device, data, scene).unwrap();
+        create_skybox_descriptor_sets(device, data, scene).unwrap();
         for (_, object) in scene.render_objects.iter_mut() {
             create_uniform_buffers::<PbrUniform>(
-                &instance,
-                &device,
+                instance,
+                device,
                 data,
                 &mut object.uniform_buffers,
                 &mut object.uniform_buffers_memory,
             )
             .unwrap();
             create_pbr_descriptor_sets::<VertexPbr, PbrUniform>(
-                &device,
+                device,
                 data,
                 &mut scene.sun,
                 object,
@@ -177,14 +175,12 @@ pub fn recreate_swapchain(
             .unwrap();
         }
         println!("here");
-        for objects in &mut gui.render_objects {
-            for object in objects {
-                object.descriptor_set =
-                    create_gui_descriptor_sets(&gui.image_map, &device, &data, &object.id).unwrap();
-            }
+        for object in &mut gui.render_objects {
+            object.descriptor_set =
+                create_gui_descriptor_sets(&gui.image_map, device, data, &object.id).unwrap();
         }
 
-        create_command_buffers(&device, scene, data, window, Some(gui)).unwrap();
+        create_command_buffers(device, scene, data, window, Some(gui)).unwrap();
         data.recreated = true;
         info!("recreated swapchain");
     }
@@ -201,7 +197,7 @@ pub fn update_uniform_buffer(
 ) {
     let view = scene.camera.transform.matrix();
 
-    let proj = scene.camera.projection_matrix(&data, gui);
+    let proj = scene.camera.projection_matrix(data, gui);
 
     data.pbr_push_contant = PbrPushConstant {
         proj_inv_view: (view.inverse()),
@@ -210,7 +206,7 @@ pub fn update_uniform_buffer(
         let mut model = [Mat4::default(); 10];
         for (index, instance_index) in object.instances.iter().enumerate() {
             let instance = scene.objects.get(*instance_index).unwrap();
-            model[index] = instance.global_matrix(&scene);
+            model[index] = instance.global_matrix(scene);
         }
         let ubo = PbrUniform {
             model,
@@ -226,7 +222,7 @@ pub fn update_uniform_buffer(
             x: data.swapchain_extent.width as f32 / scale,
             y: data.swapchain_extent.height as f32 / scale,
         };
-        unsafe { ubo.map_memory(&device, data.global_buffer_memory[image_index]) }.unwrap();
+        unsafe { ubo.map_memory(device, data.global_buffer_memory[image_index]) }.unwrap();
     }
     let memory = unsafe {
         device.map_memory(
@@ -242,6 +238,198 @@ pub fn update_uniform_buffer(
     unsafe { device.unmap_memory(scene.sun.memory[image_index]) };
 }
 
+pub fn handle_acquired_image(
+    mut app: ResMut<VulkanApp>,
+    mut data: ResMut<AppData>,
+    mut scene: ResMut<Scene>,
+    window_query: Query<Entity, With<PrimaryWindow>>,
+    mut gui: NonSendMut<Gui>,
+) {
+    unsafe {
+        let w_id = window_query.single().unwrap();
+        WINIT_WINDOWS.with_borrow(|windows| {
+            if let Some(window) = windows.get_window(w_id) {
+                app.device
+                    .wait_for_fences(&[data.in_flight_fences[app.frame]], true, u64::MAX)
+                    .unwrap();
+
+                let result = app.device.acquire_next_image_khr(
+                    data.swapchain,
+                    u64::MAX,
+                    data.image_available_semaphores[app.frame],
+                    vk::Fence::null(),
+                );
+
+                app.image_index = match result {
+                    Ok((image_index, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
+                        if cfg!(target_os = "macos") {
+                            image_index as usize
+                        } else {
+                            recreate_swapchain(
+                                &app.instance,
+                                &app.device,
+                                &mut scene,
+                                &mut data,
+                                window,
+                                &mut gui,
+                            );
+                            return;
+                        }
+                    }
+                    Ok((image_index, _)) => {
+                        //app.data.recreated = false;
+                        image_index as usize
+                    }
+                    Err(vk::ErrorCode::OUT_OF_DATE_KHR) => {
+                        recreate_swapchain(
+                            &app.instance,
+                            &app.device,
+                            &mut scene,
+                            &mut data,
+                            window,
+                            &mut gui,
+                        );
+                        return;
+                    }
+                    Err(e) => {
+                        error!("{:?}", e);
+                        return;
+                    }
+                };
+
+                let image_in_flight = data.images_in_flight[app.image_index];
+                if !image_in_flight.is_null() {
+                    app.device
+                        .wait_for_fences(&[image_in_flight], true, u64::MAX)
+                        .unwrap();
+                }
+
+                data.images_in_flight[app.image_index] = data.in_flight_fences[app.frame];
+            }
+        })
+    }
+}
+
+pub fn update_uniforms(
+    app: Res<VulkanApp>,
+    mut data: ResMut<AppData>,
+    mut scene: ResMut<Scene>,
+    window_query: Query<Entity, With<PrimaryWindow>>,
+    mut gui: NonSendMut<Gui>,
+) {
+    unsafe {
+        let w_id = window_query.single().unwrap();
+        WINIT_WINDOWS.with_borrow(|windows| {
+            if let Some(window) = windows.get_window(w_id) {
+                if gui.egui_state.egui_ctx().has_requested_repaint()
+                    && let Some(egui_output) = gui.output.take()
+                {
+                    gui.update_gui_images(
+                        &app.instance,
+                        &app.device,
+                        &mut data,
+                        &egui_output.textures_delta,
+                    )
+                    .unwrap();
+                    let ppp = gui.egui_state.egui_ctx().pixels_per_point();
+                    gui.update_gui_mesh(
+                        &app.instance,
+                        &app.device,
+                        &mut data,
+                        &egui_output,
+                        ppp,
+                        app.image_index,
+                    )
+                    .unwrap();
+                    gui.needs_redraw = false;
+                }
+                update_uniform_buffer(
+                    app.image_index,
+                    &app.device,
+                    &mut scene,
+                    &mut data,
+                    window,
+                    &mut gui,
+                );
+            }
+        })
+    }
+}
+pub fn submit_command_buffer_and_present_image(
+    mut app: ResMut<VulkanApp>,
+    mut data: ResMut<AppData>,
+    mut scene: ResMut<Scene>,
+    window_query: Query<Entity, With<PrimaryWindow>>,
+    mut gui: NonSendMut<Gui>,
+) {
+    unsafe {
+        let w_id = window_query.single().unwrap();
+        WINIT_WINDOWS.with_borrow(|windows| {
+            if let Some(window) = windows.get_window(w_id) {
+                let wait_semaphores = &[data.image_available_semaphores[app.frame]];
+                let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+                create_command_buffer(
+                    &app.device,
+                    &mut scene,
+                    &mut data,
+                    window,
+                    Some(&mut gui),
+                    app.image_index,
+                )
+                .unwrap();
+                let command_buffers = &[data.command_centers[app.image_index].command_buffers[0]];
+                let signal_semaphores = &[data.render_finished_semaphores[app.frame]];
+                let submit_info = vk::SubmitInfo::builder()
+                    .wait_semaphores(wait_semaphores)
+                    .wait_dst_stage_mask(wait_stages)
+                    .command_buffers(command_buffers)
+                    .signal_semaphores(signal_semaphores);
+
+                app.device
+                    .reset_fences(&[data.in_flight_fences[app.frame]])
+                    .unwrap();
+
+                app.device
+                    .queue_submit(
+                        data.graphics_queue,
+                        &[submit_info],
+                        data.in_flight_fences[app.frame],
+                    )
+                    .unwrap();
+                let swapchains = &[data.swapchain];
+                let image_indices = &[app.image_index as u32];
+                let present_info = vk::PresentInfoKHR::builder()
+                    .wait_semaphores(signal_semaphores)
+                    .swapchains(swapchains)
+                    .image_indices(image_indices);
+
+                let result = app
+                    .device
+                    .queue_present_khr(data.present_queue, &present_info);
+                let changed = result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR)
+                    || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR);
+
+                if app.resized || changed {
+                    app.resized = false;
+                    recreate_swapchain(
+                        &app.instance,
+                        &app.device,
+                        &mut scene,
+                        &mut data,
+                        window,
+                        &mut gui,
+                    );
+                } else if let Err(e) = result {
+                    error!("{e:?}");
+                    return;
+                }
+                app.device.queue_wait_idle(data.present_queue).unwrap();
+
+                app.frame = (app.frame + 1) % MAX_FRAMES_IN_FLIGHT;
+            }
+        })
+    }
+}
 /// Renders a frame for our Vulkan app.
 pub unsafe fn render(
     app: &mut VulkanApp,
@@ -408,26 +596,24 @@ pub(crate) unsafe fn destroy(
         data.image_available_semaphores
             .iter()
             .for_each(|s| app.device.destroy_semaphore(*s, None));
-        for objects in &gui.render_objects {
-            for object in objects {
+        for object in &gui.render_objects {
+            app.device
+                .free_memory(object.vertex_data.vertex_buffer_memory, None);
+            app.device
+                .destroy_buffer(object.vertex_data.vertex_buffer, None);
+            app.device
+                .free_memory(object.vertex_data.index_buffer_memory, None);
+            app.device
+                .destroy_buffer(object.vertex_data.index_buffer, None);
+            if let Some(staging_map) = &object.vertex_data.mem_map {
                 app.device
-                    .free_memory(object.vertex_data.vertex_buffer_memory, None);
+                    .free_memory(staging_map.index.staging_memory, None);
                 app.device
-                    .destroy_buffer(object.vertex_data.vertex_buffer, None);
+                    .destroy_buffer(staging_map.index.staging_buffer, None);
                 app.device
-                    .free_memory(object.vertex_data.index_buffer_memory, None);
+                    .free_memory(staging_map.vertex.staging_memory, None);
                 app.device
-                    .destroy_buffer(object.vertex_data.index_buffer, None);
-                if let Some(staging_map) = &object.vertex_data.mem_map {
-                    app.device
-                        .free_memory(staging_map.index.staging_memory, None);
-                    app.device
-                        .destroy_buffer(staging_map.index.staging_buffer, None);
-                    app.device
-                        .free_memory(staging_map.vertex.staging_memory, None);
-                    app.device
-                        .destroy_buffer(staging_map.vertex.staging_buffer, None);
-                }
+                    .destroy_buffer(staging_map.vertex.staging_buffer, None);
             }
         }
         for (_i, object) in scene.render_objects.iter() {

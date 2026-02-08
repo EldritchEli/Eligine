@@ -180,7 +180,7 @@ pub unsafe fn create_descriptor_pool(
 pub unsafe fn create_pbr_descriptor_sets<V, U>(
     device: &Device,
     data: &mut AppData,
-    sun: &mut Sun,
+    sun: &Sun,
     object: &mut RenderObject<V>,
 ) -> Result<()>
 where
@@ -192,11 +192,11 @@ where
         .descriptor_pool(data.descriptor_pool)
         .set_layouts(&layouts);
 
-    object.set_descriptor_sets(device.allocate_descriptor_sets(&info)?);
+    object.descriptor_sets = device.allocate_descriptor_sets(&info)?;
 
     // Update
     for i in 0..data.swapchain_images.len() {
-        object.init_descriptor(device, data, sun, i);
+        object.write_descriptors(device, data, &sun, i);
     }
 
     Ok(())

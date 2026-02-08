@@ -1,10 +1,10 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 use anyhow::Result;
+use bevy::math::{U8Vec4, Vec2, Vec3, vec3};
 use std::mem::size_of;
 
 use crate::vulkan::buffer_util::{copy_buffer, create_buffer};
 use crate::winit_app::winit_render_app::AppData;
-use glam::{U8Vec4, Vec2, Vec3, vec3};
 use std::ptr::copy_nonoverlapping as memcpy;
 use varlen_macro::define_varlen;
 use vulkanalia::vk::{DeviceV1_0, HasBuilder};

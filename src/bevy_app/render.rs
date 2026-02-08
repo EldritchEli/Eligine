@@ -27,6 +27,7 @@ use crate::{
     },
 };
 use bevy::ecs::system::{NonSendMut, Res, ResMut};
+use bevy::math::Mat4;
 use bevy::{
     ecs::{
         entity::Entity,
@@ -39,7 +40,6 @@ use bevy::{
 };
 use std::intrinsics::copy_nonoverlapping as memcpy;
 
-use glam::Mat4;
 use tracing::{error, info};
 use vulkanalia::{
     Device, Entry, Instance,
@@ -430,127 +430,6 @@ pub fn submit_command_buffer_and_present_image(
         })
     }
 }
-/// Renders a frame for our Vulkan app.
-pub unsafe fn render(
-    app: &mut VulkanApp,
-    data: &mut AppData,
-    scene: &mut Scene,
-    window: &Window,
-    gui: &mut Gui,
-) {
-    app.device
-        .wait_for_fences(&[data.in_flight_fences[app.frame]], true, u64::MAX)
-        .unwrap();
-
-    let result = app.device.acquire_next_image_khr(
-        data.swapchain,
-        u64::MAX,
-        data.image_available_semaphores[app.frame],
-        vk::Fence::null(),
-    );
-
-    let image_index = match result {
-        Ok((image_index, vk::SuccessCode::SUBOPTIMAL_KHR)) => {
-            if cfg!(target_os = "macos") {
-                image_index as usize
-            } else {
-                recreate_swapchain(&app.instance, &app.device, scene, data, window, gui);
-                return;
-            }
-        }
-        Ok((image_index, _)) => {
-            //app.data.recreated = false;
-            image_index as usize
-        }
-        Err(vk::ErrorCode::OUT_OF_DATE_KHR) => {
-            recreate_swapchain(&app.instance, &app.device, scene, data, window, gui);
-            return;
-        }
-        Err(e) => {
-            error!("{:?}", e);
-            return;
-        }
-    };
-
-    let image_in_flight = data.images_in_flight[image_index];
-    if !image_in_flight.is_null() {
-        app.device
-            .wait_for_fences(&[image_in_flight], true, u64::MAX)
-            .unwrap();
-    }
-
-    data.images_in_flight[image_index] = data.in_flight_fences[app.frame];
-    if gui.egui_state.egui_ctx().has_requested_repaint()
-        && let Some(egui_output) = gui.output.take()
-    {
-        gui.update_gui_images(
-            &app.instance,
-            &app.device,
-            data,
-            &egui_output.textures_delta,
-        )
-        .unwrap();
-        gui.update_gui_mesh(
-            &app.instance,
-            &app.device,
-            data,
-            &egui_output,
-            gui.egui_state.egui_ctx().pixels_per_point(),
-            image_index,
-        )
-        .unwrap();
-        gui.needs_redraw = false;
-    }
-    update_uniform_buffer(image_index, &app.device, scene, data, window, gui);
-
-    let wait_semaphores = &[data.image_available_semaphores[app.frame]];
-    let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-    create_command_buffer(&app.device, scene, data, window, Some(gui), image_index).unwrap();
-    let command_buffers = &[data.command_centers[image_index].command_buffers[0]];
-    let signal_semaphores = &[data.render_finished_semaphores[app.frame]];
-    let submit_info = vk::SubmitInfo::builder()
-        .wait_semaphores(wait_semaphores)
-        .wait_dst_stage_mask(wait_stages)
-        .command_buffers(command_buffers)
-        .signal_semaphores(signal_semaphores);
-
-    app.device
-        .reset_fences(&[data.in_flight_fences[app.frame]])
-        .unwrap();
-
-    app.device
-        .queue_submit(
-            data.graphics_queue,
-            &[submit_info],
-            data.in_flight_fences[app.frame],
-        )
-        .unwrap();
-
-    let swapchains = &[data.swapchain];
-    let image_indices = &[image_index as u32];
-    let present_info = vk::PresentInfoKHR::builder()
-        .wait_semaphores(signal_semaphores)
-        .swapchains(swapchains)
-        .image_indices(image_indices);
-
-    let result = app
-        .device
-        .queue_present_khr(data.present_queue, &present_info);
-    let changed = result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR)
-        || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR);
-
-    if app.resized || changed {
-        app.resized = false;
-        recreate_swapchain(&app.instance, &app.device, scene, data, window, gui);
-    } else if let Err(e) = result {
-        error!("{e:?}");
-        return;
-    }
-    app.device.queue_wait_idle(data.present_queue).unwrap();
-
-    app.frame = (app.frame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
 /// Destroys our Vulkan app.
 pub(crate) unsafe fn destroy(
     app: &VulkanApp,

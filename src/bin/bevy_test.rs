@@ -9,8 +9,8 @@ use VulcanEngine_0::{
 use bevy::{
     app::{App, PostStartup},
     ecs::system::ResMut,
+    math::{Quat, Vec3},
 };
-use glam::{Quat, Vec3};
 
 pub fn main() {
     App::new()

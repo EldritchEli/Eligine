@@ -1,5 +1,7 @@
-use bevy::ecs::component::Component;
-use glam::{Mat4, Quat, Vec3};
+use bevy::{
+    ecs::component::Component,
+    math::{Mat4, Quat, Vec3},
+};
 use std::{f32::consts::PI, ops::Mul};
 
 #[derive(Debug, PartialEq, Clone, Component)]

@@ -1,6 +1,6 @@
 use crate::vulkan::input_state::KeyState::{Enter, Hold, Nothing, Release};
 use bevy::ecs::resource::Resource;
-use glam::{Vec2, vec2};
+use bevy::math::{Vec2, vec2};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};

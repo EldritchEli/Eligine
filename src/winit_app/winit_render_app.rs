@@ -25,6 +25,7 @@ use crate::vulkan::vertexbuffer_util::VertexPbr;
 use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_ENABLED};
 use anyhow::anyhow;
 use bevy::ecs::resource::Resource;
+use bevy::math::Mat4;
 use log::info;
 use std::path::Path;
 use std::time::Instant;
@@ -40,7 +41,6 @@ use winit::window::Window;
 use crate::game_objects::render_object::ObjectId;
 use crate::game_objects::scene::Scene;
 use crate::vulkan::color_objects::create_color_objects;
-use glam::Mat4;
 use std::ptr::copy_nonoverlapping as memcpy;
 
 /// Our Vulkan app.

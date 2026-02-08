@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use glam::{Vec2, Vec3, Vec4};
+use bevy::math::{Mat4, Vec2, Vec3, Vec4};
 use gltf::json::accessor::{ComponentType, Type};
 use gltf::{
     Accessor, Node, Semantic,
@@ -165,7 +165,7 @@ fn load_node(
             render_ids.push(render_key.clone());
         }
     }
-    let transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
+    let transform = Mat4::from_cols_array_2d(&node.transform().matrix());
 
     let (scale, rotation, position) = transform.to_scale_rotation_translation();
     let transform = Transform {

@@ -1,16 +1,12 @@
-use bevy::ecs::lifecycle::Add;
 use bevy::ecs::message::MessageReader;
-use bevy::ecs::observer::On;
 use bevy::ecs::system::{NonSendMut, Res, ResMut};
 use bevy::input::ButtonInput;
-use bevy::input::keyboard::{KeyCode, KeyboardInput};
-use bevy::input::mouse::{MouseButton, MouseButtonInput, MouseMotion};
-use bevy::reflect::Enum;
+use bevy::input::keyboard::KeyCode;
+use bevy::input::mouse::{MouseButton, MouseMotion};
+use bevy::math::{Mat4, Quat, Vec3};
 use bevy::time::Time;
-use glam::{Mat4, Quat, Vec3};
-use winit::event::MouseScrollDelta;
 
-use crate::game_objects::transform::{self, Transform};
+use crate::game_objects::transform::Transform;
 use crate::gui::gui::Gui;
 use crate::vulkan::input_state::InputState;
 use crate::vulkan::{CORRECTION, FAR_PLANE_DISTANCE};

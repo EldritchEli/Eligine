@@ -1,11 +1,10 @@
-use crate::game_objects::material::Material;
 use crate::game_objects::scene::Sun;
 use crate::vulkan::descriptor_util::{create_pbr_descriptor_sets, create_uniform_buffers};
 use crate::vulkan::image_util::TextureData;
 use crate::vulkan::uniform_buffer_object::{GlobalUniform, OrthographicLight, PbrUniform};
 use crate::vulkan::vertexbuffer_util::{Vertex, VertexData};
 use crate::winit_app::winit_render_app::AppData;
-use glam::Vec4;
+use bevy::math::Vec4;
 use terrors::OneOf;
 
 use vulkanalia::vk::{self, Buffer, DescriptorSet, DeviceMemory, DeviceV1_0, HasBuilder};
@@ -22,36 +21,35 @@ pub struct PBR {
     pub base: Vec4,
 }
 
+impl PBR {
+    pub fn get_descriptor_image_info(&self) -> vk::DescriptorImageInfo {
+        vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.texture_data.image_view)
+            .sampler(self.texture_data.sampler)
+            .build()
+    }
+}
+
 pub trait Renderable {
     fn set_descriptor_sets(&mut self, descriptor_sets: Vec<DescriptorSet>);
     fn get_descriptor_sets(&self) -> &Vec<DescriptorSet>;
     fn get_uniform_buffers(&self) -> &Vec<Buffer>;
-    fn init_descriptor(&self, device: &Device, data: &AppData, sun: &mut Sun, i: usize);
+    fn write_descriptors(&self, device: &Device, data: &AppData, sun: &Sun, i: usize);
 }
-impl<V> Renderable for RenderObject<V>
+impl<V> RenderObject<V>
 where
     V: Vertex,
 {
-    fn set_descriptor_sets(&mut self, descriptor_sets: Vec<DescriptorSet>) {
-        self.descriptor_sets = descriptor_sets;
-    }
-
-    fn get_descriptor_sets(&self) -> &Vec<DescriptorSet> {
-        &self.descriptor_sets
-    }
-
-    fn get_uniform_buffers(&self) -> &Vec<Buffer> {
-        &self.uniform_buffers
-    }
-
-    fn init_descriptor(&self, device: &Device, data: &AppData, sun: &mut Sun, i: usize) {
+    pub fn write_descriptors(&self, device: &Device, data: &AppData, sun: &Sun, i: usize) {
         let info = vk::DescriptorBufferInfo::builder()
             .buffer(sun.buffer[i])
             .offset(0)
             .range(size_of::<OrthographicLight>() as u64);
+
         let buffer_info = &[info];
         let ortho_write = vk::WriteDescriptorSet::builder()
-            .dst_set(self.get_descriptor_sets()[i])
+            .dst_set(self.descriptor_sets[i])
             .dst_binding(0)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -63,20 +61,20 @@ where
 
         let buffer_info = &[info];
         let global_write = vk::WriteDescriptorSet::builder()
-            .dst_set(self.get_descriptor_sets()[i])
+            .dst_set(self.descriptor_sets[i])
             .dst_binding(1)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(buffer_info);
 
         let info = vk::DescriptorBufferInfo::builder()
-            .buffer(self.get_uniform_buffers()[i])
+            .buffer(self.uniform_buffers[i])
             .offset(0)
             .range(size_of::<PbrUniform>() as u64);
 
         let buffer_info = &[info];
         let ubo_write = vk::WriteDescriptorSet::builder()
-            .dst_set(self.get_descriptor_sets()[i])
+            .dst_set(self.descriptor_sets[i])
             .dst_binding(2)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -89,7 +87,7 @@ where
 
         let image_info = &[info];
         let sampler_write = vk::WriteDescriptorSet::builder()
-            .dst_set(self.get_descriptor_sets()[i])
+            .dst_set(self.descriptor_sets[i])
             .dst_binding(3)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -126,7 +124,7 @@ where
         data: &mut AppData,
         vertex_data: VertexData<V>,
         pbr: PBR,
-        sun: &mut Sun,
+        sun: &Sun,
     ) -> Result<RenderObject<V>, OneOf<(String, anyhow::Error)>> {
         let mut uniform_buffers = vec![];
         let mut uniform_buffers_memory = vec![];

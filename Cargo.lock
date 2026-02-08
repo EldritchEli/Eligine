@@ -13,7 +13,6 @@ dependencies = [
  "either",
  "env_logger 0.6.2",
  "epaint",
- "glam 0.31.0",
  "gltf",
  "itertools",
  "log",
@@ -753,7 +752,7 @@ dependencies = [
  "arrayvec",
  "bevy_reflect",
  "derive_more",
- "glam 0.30.9",
+ "glam",
  "itertools",
  "libm",
  "rand",
@@ -828,7 +827,7 @@ dependencies = [
  "downcast-rs 2.0.1",
  "erased-serde",
  "foldhash 0.2.0",
- "glam 0.30.9",
+ "glam",
  "indexmap",
  "inventory",
  "serde",
@@ -887,7 +886,7 @@ dependencies = [
  "downcast-rs 2.0.1",
  "encase",
  "fixedbitset",
- "glam 0.30.9",
+ "glam",
  "image",
  "indexmap",
  "js-sys",
@@ -1971,12 +1970,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glam"
-version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74a4d85559e2637d3d839438b5b3d75c31e655276f9544d72475c36b92fabbed"
-
-[[package]]
 name = "gltf"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2150,7 +2143,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29a164ceff4500f2a72b1d21beaa8aa8ad83aec2b641844c659b190cb3ea2e0b"
 dependencies = [
  "constgebra",
- "glam 0.30.9",
+ "glam",
  "tinyvec",
 ]
 

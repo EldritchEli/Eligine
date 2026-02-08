@@ -1,26 +1,14 @@
 use std::marker::PhantomData;
 
-use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
-use bevy::transform::components::Transform;
-use vulkanalia::vk;
+use vulkanalia::vk::{self, WriteDescriptorSet};
 
-use crate::game_objects::material::MaterialInstance;
-use crate::game_objects::render_object::PBR;
-use crate::vulkan::vertexbuffer_util::Vertex;
+use crate::{
+    game_objects::{material::MaterialInstance, render_object::PBR},
+    vulkan::vertexbuffer_util::Vertex,
+};
 
-#[derive(Component)]
-pub struct Name(String);
-
-#[derive(Bundle)]
-pub struct PbrInstance<M: MaterialInstance + 'static> {
-    name: Name,
-    local_transform: Transform,
-    global_transform: Transform,
-    uniform: UniformInstance<M>,
-}
-
-//Represents the an instance of a pbr material. with support for instances rendering.
+//Represents the an instance of a pbr material. with support for instanced rendering.
 #[derive(Component)]
 pub struct PbrRenderSource<V>
 where
@@ -47,4 +35,5 @@ pub struct UniformInstance<M: MaterialInstance + Sync> {
     buffer_offset: u32,
     material: PhantomData<M>,
     changed: bool,
+    write_descriptor: Vec<WriteDescriptorSet>,
 }

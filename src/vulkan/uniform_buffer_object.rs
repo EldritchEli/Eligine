@@ -1,8 +1,7 @@
 use std::mem::transmute;
 use std::ptr::copy_nonoverlapping as memcpy;
 
-use bevy::math::Vec3;
-use glam::{Mat4, Vec4, vec4};
+use bevy::math::{Mat4, Vec3, Vec4, vec4};
 use vulkanalia::Instance;
 use vulkanalia::{
     Device,

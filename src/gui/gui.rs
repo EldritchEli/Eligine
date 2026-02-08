@@ -5,6 +5,7 @@ use bevy::{
     core_pipeline::core_2d::graph::input,
     ecs::{entity::Entity, observer::On, query::With, system::ResMut, world::World},
     input::keyboard::{KeyCode, KeyboardInput},
+    math::{U8Vec4, Vec2},
     window::PrimaryWindow,
     winit::{DisplayHandleWrapper, WINIT_WINDOWS},
 };
@@ -12,7 +13,6 @@ use egui::{
     ClippedPrimitive, FullOutput, Pos2, Rect, SidePanel, TextureId, TexturesDelta, Ui, ViewportInfo,
 };
 use egui_winit::{apply_viewport_builder_to_window, create_winit_window_attributes};
-use glam::{U8Vec4, Vec2};
 use itertools::Either;
 use log::info;
 use vulkanalia::{

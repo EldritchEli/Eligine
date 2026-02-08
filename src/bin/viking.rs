@@ -4,8 +4,8 @@ use VulcanEngine_0::{
     game_objects::{skybox::SkyBox, transform::Transform},
     winit_app::winit_app::WinitWrapper,
 };
-use glam::{Quat, Vec3};
 
+use bevy::math::{Quat, Vec3};
 use terrors::OneOf;
 use winit::{
     error::{EventLoopError, OsError},

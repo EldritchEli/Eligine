@@ -4,7 +4,7 @@ use crate::vulkan::input_state::InputState;
 use crate::vulkan::uniform_buffer_object::OrthographicLight;
 use crate::vulkan::vertexbuffer_util::VertexPbr;
 use bevy::ecs::resource::Resource;
-use glam::Mat4;
+use bevy::math::Mat4;
 use slab::{IntoIter, Iter, IterMut, Slab};
 use vulkanalia::vk::{self};
 
@@ -184,7 +184,7 @@ impl Default for Scene {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Resource)]
 pub struct Sun {
     pub omnidirectional_light: OrthographicLight,
     pub buffer: Vec<vk::Buffer>,
